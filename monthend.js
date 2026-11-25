@@ -1,7 +1,8 @@
 // 月末（手順I3）：金融資産の評価替え
-import { state, col, db, loadAllVouchers, loadVouchers, fetchMonthVouchers, loadClosings, isClosed, loadAssets } from "./state.js?v=0.2I4";
-import { pendingDrafts } from "./assets.js?v=0.2I4";
-import { $, esc, yen, ymd, hk, shiftMonth, monthOf, WD, showError } from "./util.js?v=0.2I4";
+import { state, col, db, loadAllVouchers, loadVouchers, fetchMonthVouchers, loadClosings, isClosed, loadAssets } from "./state.js?v=0.2I5a";
+import { pendingDrafts } from "./assets.js?v=0.2I5a";
+import { downloadFullBackup, makeCopy } from "./backup.js?v=0.2I5a";
+import { $, esc, yen, ymd, hk, shiftMonth, monthOf, WD, showError } from "./util.js?v=0.2I5a";
 import { doc, getDocs, writeBatch, setDoc, deleteField, serverTimestamp, arrayUnion } from "https://www.gstatic.com/firebasejs/13.4.0/firebase-firestore.js";
 
 const EVAL_NOS = [26, 27, 28, 29, 30]; // 評価替えの対象（金融資産）
@@ -258,6 +259,8 @@ async function renderClose(view) {
         <tr><td><input type="checkbox" id="cl-m2" ${manual.points ? "checked" : ""} ${closed ? "disabled" : ""}></td><td>ポイントの残高合わせ（任意）</td><td class="note">残高合わせの機能はまだないので、必要なら手で記帳してチェックします</td></tr>
         <tr><td>${mark(okBal)}</td><td>貸借が一致している</td><td class="note">借方計 ¥${yen(dr)}／貸方計 ¥${yen(cr)}${bad ? `（借方と貸方が合わない仕訳が${bad}件）` : ""}</td></tr>
       </tbody></table></div>
+      ${closed && me.justClosed === month ? `<div class="askbox" id="cl-bk"><p><strong>${esc(month)}月度を締めました。</strong>${esc(me.copyNote || "")}いまの全データをバックアップ（PCにJSONファイルを保存）しますか？</p>
+        <div class="actions"><button type="button" class="sub" id="cl-bk-no">あとで</button><button type="button" class="primary" id="cl-bk-yes">バックアップを保存する</button></div><p class="note" id="cl-bk-msg"></p></div>` : ""}
       ${closed ? `
         <p class="note">${esc(month)}月度は ${ts(closing.closedAt) ? esc(ts(closing.closedAt).toLocaleString("ja-JP")) : ""} に締めました（締めた時の残高の控えを保存済み）。</p>
         ${changed.length ? `<div class="askbox"><p><strong>⚠ 締めた後に変わりました。</strong>締めた時の控えと、いまの計算結果がずれている科目があります。</p>
@@ -271,6 +274,18 @@ async function renderClose(view) {
     ${closedListHtml(all)}`;
   $("cl-prev").addEventListener("click", () => { me.month = shiftMonth(month, -1); me.date = ""; renderMonthEnd(); });
   $("cl-next").addEventListener("click", () => { me.month = shiftMonth(month, 1); me.date = ""; renderMonthEnd(); });
+  if ($("cl-bk")) {
+    $("cl-bk-no").addEventListener("click", () => { me.justClosed = null; $("cl-bk").remove(); });
+    $("cl-bk-yes").addEventListener("click", async () => {
+      $("cl-bk-yes").disabled = true; $("cl-bk-msg").textContent = "保存しています…";
+      try {
+        await downloadFullBackup(`my-ledger-backup-月次締め-${month}`);
+        me.justClosed = null;
+        $("cl-bk-msg").textContent = "バックアップを保存しました（ダウンロードしたファイルを確認してください）。";
+        $("cl-bk-yes").hidden = true; $("cl-bk-no").textContent = "閉じる";
+      } catch (err) { console.error(err); $("cl-bk-yes").disabled = false; $("cl-bk-msg").textContent = "失敗しました：" + (err.code || err.message); }
+    });
+  }
   if ($("cl-m1")) $("cl-m1").addEventListener("change", (e) => { manual.recurring = e.target.checked; });
   if ($("cl-m2")) $("cl-m2").addEventListener("change", (e) => { manual.points = e.target.checked; });
   if ($("cl-close")) $("cl-close").addEventListener("click", async () => {
@@ -283,6 +298,9 @@ async function renderClose(view) {
     $("cl-close").disabled = true;
     try {
       await closeMonth(month, now, upto.length, { recurring: manual.recurring, points: manual.points });
+      me.justClosed = month; // 締めた直後は、バックアップの案内を出す
+      try { await makeCopy(`月次締め ${month}`); me.copyNote = "Firestore内に控えを自動で作りました。"; }
+      catch (err) { console.error("[控え]", err); me.copyNote = "Firestore内の控えは作れませんでした（設定→バックアップから手で作れます）。"; }
       renderMonthEnd();
     } catch (err) {
       console.error("[月次締め]", err);

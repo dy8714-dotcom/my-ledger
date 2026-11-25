@@ -1,7 +1,7 @@
 // バックアップ（手順G）：全データのJSON、仕訳のCSV
-import { state, col, loadAllVouchers } from "./state.js?v=0.2I4";
-import { $, esc, ymd, showError } from "./util.js?v=0.2I4";
-import { getDocs, getDoc, setDoc, doc } from "https://www.gstatic.com/firebasejs/13.4.0/firebase-firestore.js";
+import { state, col, db, loadAll, loadVouchers, loadAllVouchers } from "./state.js?v=0.2I5a";
+import { $, esc, ymd, showError, openModal, closeModal } from "./util.js?v=0.2I5a";
+import { collection, getDocs, getDoc, setDoc, deleteDoc, writeBatch, doc } from "https://www.gstatic.com/firebasejs/13.4.0/firebase-firestore.js";
 
 export function saveFile(text, filename, mime, bom) {
   const blob = new Blob([(bom ? "﻿" : "") + text], { type: mime });
@@ -94,6 +94,110 @@ function voucherCsv(list) {
   return rows.join("\r\n");
 }
 
+// ---------- Firestore内の控え（I5a） ----------
+// 全データを、Firestoreの中の別の場所（backups）にも保存しておく。1文書は約1MBまでなので、小分けにして入れる
+const COPY_COLLS = ["accounts", "fields", "parties", "vouchers", "assets", "valuations", "closings"];
+const PART_BYTES = 500000;
+const KEEP_COPIES = 20;
+const byteLen = (s) => new TextEncoder().encode(s).length;
+const partsCol = (id) => collection(db, "users", state.user.uid, "backups", id, "parts");
+
+// dumpAll の結果を、小分け（parts）に分ける
+export function splitParts(data) {
+  const parts = [];
+  COPY_COLLS.forEach((c) => {
+    let cur = [], size = 0;
+    const flush = () => { if (cur.length) { parts.push({ n: parts.length, coll: c, json: JSON.stringify(cur) }); cur = []; size = 0; } };
+    (data[c] || []).forEach((item) => {
+      const len = byteLen(JSON.stringify(item));
+      if (size + len > PART_BYTES) flush();
+      cur.push(item); size += len;
+    });
+    flush();
+  });
+  parts.push({ n: parts.length, coll: "meta", json: JSON.stringify(data.meta || {}) });
+  return parts;
+}
+// 小分けから元のデータに戻す
+export function joinParts(parts) {
+  const data = { meta: {} };
+  COPY_COLLS.forEach((c) => { data[c] = []; });
+  parts.sort((a, b) => a.n - b.n).forEach((p) => {
+    if (p.coll === "meta") data.meta = JSON.parse(p.json);
+    else data[p.coll] = data[p.coll].concat(JSON.parse(p.json));
+  });
+  return data;
+}
+
+export async function listCopies() {
+  const snap = await getDocs(col("backups"));
+  return snap.docs.map((d) => ({ id: d.id, ...d.data() })).sort((a, b) => b.createdAt - a.createdAt);
+}
+
+// いまの全データの控えを、Firestoreの中に作る
+export async function makeCopy(reason) {
+  const data = await dumpAll();
+  const parts = splitParts(data);
+  const id = "b" + Date.now().toString(36) + Math.random().toString(36).slice(2, 5);
+  for (let i = 0; i < parts.length; i += 5) {
+    const batch = writeBatch(db);
+    parts.slice(i, i + 5).forEach((p) => batch.set(doc(partsCol(id), String(p.n).padStart(3, "0")), p));
+    await batch.commit();
+  }
+  const counts = {};
+  COPY_COLLS.forEach((c) => { counts[c] = (data[c] || []).length; });
+  const meta = { createdAt: Date.now(), reason, counts, parts: parts.length, bytes: parts.reduce((s, p) => s + byteLen(p.json), 0) };
+  await setDoc(doc(col("backups"), id), meta); // 文書が揃ってから最後に記録（途中で止まった控えは一覧に出ない）
+  await pruneCopies();
+  return { id, ...meta };
+}
+
+async function deleteCopy(id) {
+  const snap = await getDocs(partsCol(id));
+  for (let i = 0; i < snap.docs.length; i += 400) {
+    const batch = writeBatch(db);
+    snap.docs.slice(i, i + 400).forEach((d) => batch.delete(d.ref));
+    await batch.commit();
+  }
+  await deleteDoc(doc(col("backups"), id));
+}
+async function pruneCopies() {
+  const list = await listCopies();
+  for (const c of list.slice(KEEP_COPIES)) await deleteCopy(c.id); // 古い控えから消す（最新の20件を残す）
+}
+
+export async function loadCopy(id) {
+  const snap = await getDocs(partsCol(id));
+  return joinParts(snap.docs.map((d) => d.data()));
+}
+
+// 控えの時点に戻す。直前に、いまの状態の控えとJSONを必ず作る
+export async function restoreCopy(id, onStep) {
+  onStep && onStep("いまの状態の控えを作っています…");
+  await makeCopy("復元前（自動）");
+  await downloadFullBackup("my-ledger-backup-復元前");
+  onStep && onStep("控えを読み込んでいます…");
+  const data = await loadCopy(id);
+  for (const c of COPY_COLLS) {
+    onStep && onStep(`${c} を戻しています…`);
+    const have = await getDocs(col(c));
+    const want = new Map((data[c] || []).map((x) => [x.id, x]));
+    const ops = [];
+    want.forEach((x, k) => { const { id: _i, ...rest } = x; ops.push((b) => b.set(doc(col(c), k), rest)); });
+    have.docs.forEach((d) => { if (!want.has(d.id)) ops.push((b) => b.delete(d.ref)); });
+    for (let i = 0; i < ops.length; i += 400) {
+      const batch = writeBatch(db);
+      ops.slice(i, i + 400).forEach((f) => f(batch));
+      await batch.commit();
+    }
+  }
+  for (const k of Object.keys(data.meta || {})) await setDoc(doc(col("meta"), k), data.meta[k]);
+  onStep && onStep("画面を読み込み直しています…");
+  state.allVouchers = null;
+  await loadAll();
+  await loadVouchers();
+}
+
 export function renderBackup() {
   $("settings-body").innerHTML = `
     <div class="card" style="max-width:720px">
@@ -103,7 +207,11 @@ export function renderBackup() {
       <p class="note">科目・分野・取引先・仕訳・入力パターン・保存した検索を、すべて1つのファイルにまとめます。復元（読み込み）は手順H以降で作ります。</p>
       <p class="note" id="bk-last"></p>
       <p><button type="button" class="primary" id="bk-json">全データをダウンロード</button> <span id="bk-json-msg" class="note"></span></p>
-      <h4>② 仕訳をCSVでダウンロード</h4>
+      <h4>② Firestore内の控え（すぐ戻せる）</h4>
+      <p class="note">全データの控えを、このサイトのデータの中にも保存します。月次締めのときに自動で作り、いつでも手で作ることもできます。最新の20件を残します。Googleドライブへの保存は、次の版で追加します。</p>
+      <p><button type="button" class="sub" id="cp-make">いま控えを作る</button> <span id="cp-msg" class="note"></span></p>
+      <div id="cp-list"></div>
+      <h4>③ 仕訳をCSVでダウンロード</h4>
       <p class="note">Excelで開けるCSVです。複合仕訳は同じ伝番の行が複数に分かれます。</p>
       <p><select id="bk-year"></select>
       <button type="button" class="sub" id="bk-csv">仕訳CSVをダウンロード</button> <span id="bk-csv-msg" class="note"></span></p>
@@ -124,6 +232,26 @@ export function renderBackup() {
     } catch (err) { $("bk-json-msg").textContent = ""; showError("バックアップに失敗しました：" + err.message); }
   });
 
+  drawCopies();
+  $("cp-make").addEventListener("click", async () => {
+    $("cp-make").disabled = true; $("cp-msg").textContent = "作っています…";
+    try { const r = await makeCopy("手動"); $("cp-msg").textContent = `作りました（仕訳${r.counts.vouchers}件）`; drawCopies(); }
+    catch (err) { console.error(err); $("cp-msg").textContent = "失敗しました：" + (err.code || err.message); }
+    $("cp-make").disabled = false;
+  });
+  $("cp-list").addEventListener("click", async (e) => {
+    const dl = e.target.closest("button[data-dl]"), rs = e.target.closest("button[data-rs]");
+    if (dl) {
+      dl.disabled = true;
+      try {
+        const data = await loadCopy(dl.dataset.dl);
+        saveFile(JSON.stringify({ app: "my-ledger", format: 1, fromCopy: dl.dataset.dl, ...data }, null, 1), `my-ledger-控え-${stampNow()}.json`, "application/json", false);
+      } catch (err) { console.error(err); showError("ダウンロードに失敗しました：" + (err.code || err.message)); }
+      dl.disabled = false;
+    }
+    if (rs) openRestore(rs.dataset.rs);
+  });
+
   loadAllVouchers().then((all) => {
     const years = [...new Set(all.map((v) => String(v.date).slice(0, 4)))].sort().reverse();
     $("bk-year").innerHTML = `<option value="">全期間</option>` + years.map((y) => `<option value="${esc(y)}">${esc(y)}年</option>`).join("");
@@ -139,5 +267,40 @@ export function renderBackup() {
       saveFile(voucherCsv(list), `仕訳_${y || "全期間"}_${stamp()}.csv`, "text/csv;charset=utf-8", true);
       $("bk-csv-msg").textContent = `保存しました（${list.length}件）`;
     } catch (err) { $("bk-csv-msg").textContent = ""; showError("CSVの出力に失敗しました：" + err.message); }
+  });
+}
+
+async function drawCopies() {
+  const box = $("cp-list");
+  if (!box) return;
+  let list;
+  try { list = await listCopies(); } catch (err) { box.innerHTML = `<p class="note">読み込めませんでした：${esc(err.code || err.message)}</p>`; return; }
+  box.innerHTML = list.length ? `<table class="tbl" style="min-width:0"><thead><tr><th>作った日時</th><th>きっかけ</th><th class="amt">仕訳</th><th></th></tr></thead><tbody>
+    ${list.map((c) => `<tr><td>${esc(new Date(c.createdAt).toLocaleString("ja-JP"))}</td><td>${esc(c.reason)}</td><td class="amt">${c.counts ? c.counts.vouchers : ""}</td>
+    <td><button type="button" class="sub" data-dl="${esc(c.id)}">JSONで保存</button> <button type="button" class="danger" data-rs="${esc(c.id)}">この時点に戻す</button></td></tr>`).join("")}</tbody></table>` : `<p class="note">まだ控えがありません。</p>`;
+}
+
+function openRestore(id) {
+  openModal(`<div class="dialog" role="dialog" aria-modal="true">
+    <h2>この控えの時点に戻します</h2>
+    <p>いまのデータは、この控えの内容で<strong>置き換わります</strong>（控えのあとに記帳したものは消えます）。</p>
+    <p class="note">実行する直前に、いまの状態の控えをFirestore内に作り、全データのJSONもPCに保存します。万一のときは、そこからまた戻せます。</p>
+    <label><input type="checkbox" id="rs-ok"> 置き換わることを理解しました</label>
+    <p id="rs-msg" class="note"></p>
+    <div class="actions"><button type="button" class="sub" id="rs-cancel">やめる</button><button type="button" class="danger" id="rs-go" disabled>この時点に戻す</button></div></div>`);
+  $("rs-ok").addEventListener("change", (e) => { $("rs-go").disabled = !e.target.checked; });
+  $("rs-cancel").addEventListener("click", closeModal);
+  $("rs-go").addEventListener("click", async () => {
+    $("rs-go").disabled = true; $("rs-cancel").disabled = true; $("rs-ok").disabled = true;
+    try {
+      await restoreCopy(id, (t) => { $("rs-msg").textContent = t; });
+      $("rs-msg").textContent = "戻しました。";
+      $("rs-cancel").disabled = false; $("rs-cancel").textContent = "閉じる";
+      drawCopies();
+    } catch (err) {
+      console.error("[復元]", err);
+      $("rs-msg").textContent = "失敗しました：" + (err.code || err.message) + "（途中まで戻っている可能性があります。直前に作った控えとJSONから、やり直せます）";
+      $("rs-cancel").disabled = false; $("rs-cancel").textContent = "閉じる";
+    }
   });
 }
