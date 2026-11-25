@@ -38,7 +38,9 @@ export const state = {
   lastDate: null,
   q: "",
   showHidden: false,
-  stats: { accField: {}, fieldParty: {} }
+  stats: { accField: {}, fieldParty: {} },
+  allVouchers: null,
+  tb: { month: null, mode: "month", from: null, to: null, hideZero: true, byNo: false }
 };
 
 export function col(name) {
@@ -93,5 +95,12 @@ export async function fetchMonthVouchers(month) {
 
 // 画面で表示中の月度の仕訳を読み直す
 export async function loadVouchers() {
+  state.allVouchers = null; // 記帳・削除のあと、試算表用の全件は読み直す
   state.vouchers = await fetchMonthVouchers(state.month);
+}
+
+// 試算表用：全期間の仕訳（画面を開いている間は使い回す）
+export async function loadAllVouchers() {
+  if (!state.allVouchers) state.allVouchers = toList(await getDocs(col("vouchers")));
+  return state.allVouchers;
 }

@@ -1,10 +1,11 @@
 // マイ帳簿サイト（ログインと、メニューの切り替え）
 import { GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged }
   from "https://www.gstatic.com/firebasejs/13.4.0/firebase-auth.js";
-import { auth, state, loadAll, loadVouchers } from "./state.js?v=0.1D5";
-import { $, esc, showError } from "./util.js?v=0.1D5";
-import { renderSettings } from "./settings.js?v=0.1D5";
-import { renderEntry } from "./entry.js?v=0.1D5";
+import { auth, state, loadAll, loadVouchers } from "./state.js?v=0.1E";
+import { $, esc, showError } from "./util.js?v=0.1E";
+import { renderSettings } from "./settings.js?v=0.1E";
+import { renderEntry } from "./entry.js?v=0.1E";
+import { renderTrial } from "./trial.js?v=0.1E";
 
 $("btn-login").addEventListener("click", async () => {
   showError("");
@@ -45,6 +46,7 @@ function render() {
   document.querySelectorAll("#nav button").forEach((b) =>
     b.classList.toggle("active", b.dataset.tab === state.tab));
   if (state.tab === "entry") return renderEntry();
+  if (state.tab === "trial") return renderTrial();
   if (state.tab === "settings") return renderSettings();
   const names = { trial: "試算表", ledger: "元帳・検索" };
   $("view").innerHTML =

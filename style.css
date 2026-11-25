@@ -160,3 +160,26 @@ button.danger:hover { background: #fdecea; }
 .tbl.prev tr[data-vid] { cursor: default; }
 .tbl.prev tr[data-vid]:hover td { background: #fff; }
 .tbl.prev tr.cmp:hover td { background: #f5f8ff; }
+
+/* E：試算表 */
+.monthbar .spacer { flex: 1; }
+.seg { display: inline-flex; border: 1px solid #cfc9bc; border-radius: 6px; overflow: hidden; }
+.seg button { font: inherit; font-size: 12.5px; background: #fff; border: none; border-right: 1px solid #cfc9bc; padding: 6px 12px; color: #3b4250; cursor: pointer; }
+.seg button:last-child { border-right: none; }
+.seg button.on { background: #2b3a55; color: #fff; font-weight: bold; }
+.okbadge { background: #e9f5ec; color: #1b6431; border: 1px solid #94c9a2; border-radius: 6px; padding: 4px 10px; font-size: 12.5px; }
+.warnbadge { background: #fff4e6; color: #874607; border: 1px solid #e0ae73; border-radius: 6px; padding: 4px 10px; font-size: 12.5px; }
+.tbgrid { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 16px; align-items: start; }
+.tbside { display: flex; flex-direction: column; gap: 12px; }
+.card { background: #fff; border: 1px solid #e2ddd2; border-radius: 10px; padding: 12px 16px; }
+.card .t { font-size: 12px; color: #5f6672; }
+.card .v { font-family: "Roboto Mono", monospace; font-size: 20px; font-weight: bold; margin-top: 4px; }
+.tbl.tb { min-width: 0; }
+.tbl.tb th.r, .tbl.tb td.r { text-align: right; }
+.tbl.tb tr.grp td { background: #ece8df; font-weight: bold; font-size: 12.5px; border-right: none; }
+.tbl.tb tr.sub td { background: #f5f2ea; font-weight: bold; }
+.tbl.tb tr.tot td { background: #2b3a55; color: #fff; font-weight: bold; border-right: none; }
+.tbl.tb tr { cursor: default; }
+.inc { color: #1b6431; } .out { color: #8a3f06; } .muted { color: #5f6672; }
+@media (max-width: 900px) { .tbgrid { grid-template-columns: 1fr; } }
+@media print { header, nav, .monthbar button, .seg, #tb-hide, #tb-byno { display: none !important; } }

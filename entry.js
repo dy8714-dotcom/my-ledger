@@ -1,11 +1,11 @@
 // 記帳画面（入力欄と仕訳の一覧）
-import { state, col, loadParties, loadVouchers, fetchMonthVouchers } from "./state.js?v=0.1D5";
+import { state, col, loadParties, loadVouchers, fetchMonthVouchers } from "./state.js?v=0.1E";
 import { $, esc, norm, hk, yen, parseAmount, WD, ymd, monthOf, shiftMonth, firstDayOf, accChip, openModal, closeModal }
-  from "./util.js?v=0.1D5";
-import { createCombo } from "./combo.js?v=0.1D5";
+  from "./util.js?v=0.1E";
+import { createCombo } from "./combo.js?v=0.1E";
 import { doc, setDoc, updateDoc, deleteDoc, serverTimestamp, increment, arrayUnion, deleteField }
   from "https://www.gstatic.com/firebasejs/13.4.0/firebase-firestore.js";
-import { patternsOf, sortPatterns, describePattern, addPattern, fromTemplate } from "./patterns.js?v=0.1D5";
+import { patternsOf, sortPatterns, describePattern, addPattern, fromTemplate } from "./patterns.js?v=0.1E";
 
 // ---------- 候補の作り方 ----------
 const isBlank = (a) => a.name.startsWith("（") || a.name === "ー";
