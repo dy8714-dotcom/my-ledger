@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>マイ帳簿サイト</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header>
+  <h1>マイ帳簿サイト</h1>
+  <span id="version" class="version">v0.1（手順B：ログイン確認）</span>
+</header>
+<main>
+  <section id="logged-out">
+    <p>Googleアカウントでログインしてください。</p>
+    <button id="btn-login" type="button">Googleでログイン</button>
+  </section>
+
+  <section id="logged-in" hidden>
+    <p>ログイン中：<strong id="user-email"></strong></p>
+    <p>あなたのUID（ユーザー識別番号）：</p>
+    <p class="uidbox"><code id="user-uid"></code></p>
+    <button id="btn-copy-uid" type="button">UIDをコピー</button>
+
+    <h2>書き込み・読み込みテスト</h2>
+    <p class="note">Firestoreのルールを公開したあとに押してください。</p>
+    <button id="btn-write" type="button">テスト書き込み</button>
+    <button id="btn-read" type="button">テスト読み込み</button>
+    <p id="test-result" class="result"></p>
+
+    <hr>
+    <button id="btn-logout" type="button" class="sub">ログアウト</button>
+  </section>
+
+  <p id="error" class="error" hidden></p>
+</main>
+<script type="module" src="app.js"></script>
+</body>
+</html>
