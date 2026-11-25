@@ -1,12 +1,12 @@
 // 記帳画面（入力欄と仕訳の一覧）
-import { state, col, db, loadParties, loadVouchers, fetchMonthVouchers } from "./state.js?v=0.2I1b";
-import { downloadFullBackup } from "./backup.js?v=0.2I1b";
+import { state, col, db, loadParties, loadVouchers, fetchMonthVouchers } from "./state.js?v=0.2I1c";
+import { downloadFullBackup } from "./backup.js?v=0.2I1c";
 import { $, esc, norm, hk, yen, parseAmount, WD, ymd, monthOf, shiftMonth, firstDayOf, accChip, openModal, closeModal }
-  from "./util.js?v=0.2I1b";
-import { createCombo } from "./combo.js?v=0.2I1b";
+  from "./util.js?v=0.2I1c";
+import { createCombo } from "./combo.js?v=0.2I1c";
 import { doc, setDoc, updateDoc, deleteDoc, writeBatch, serverTimestamp, increment, arrayUnion, deleteField }
   from "https://www.gstatic.com/firebasejs/13.4.0/firebase-firestore.js";
-import { patternsOf, sortPatterns, describePattern, addPattern, fromTemplate } from "./patterns.js?v=0.2I1b";
+import { patternsOf, sortPatterns, describePattern, addPattern, fromTemplate } from "./patterns.js?v=0.2I1c";
 
 // ---------- 候補の作り方 ----------
 const isBlank = (a) => a.name.startsWith("（") || a.name === "ー";
@@ -485,7 +485,7 @@ function mountVoucherForm(root, { voucher = null, onSaved, onCancel, onDeleted }
       <p class="note">${esc(fmtMD(date))}（${WD[wd]}）　借方計 ¥${yen(d)} ／ 貸方計 ¥${yen(d)} ✓　${pv.newName ? `※取引先「${esc(pv.newName)}」は新規登録されます　` : ""}${!rememberWrap.hidden && rememberEl.checked ? "※この形を入力パターンとして覚えます" : ""}</p>
       <div class="tablewrap"><table class="tbl prev">
         <thead><tr><th>伝番</th><th>税率</th><th>借方</th><th>貸方</th><th>分野</th><th>取引先</th><th>摘要</th><th class="amt">金額</th><th>印</th></tr></thead>
-        <tbody>${voucherRows(vo, false)}</tbody></table></div>
+        <tbody>${dayBand(date)}${voucherRows(vo, false)}</tbody></table></div>
       <div class="actions">
         <button type="button" class="sub" id="pv-back">戻って直す</button>
         <button type="button" class="primary" id="pv-ok">この内容で登録</button>
@@ -748,7 +748,7 @@ function previewSelected() {
     <p class="note">借方計 ¥${yen(d)} ／ 貸方計 ¥${yen(c)} ${d === c ? "一致 ✓" : "不一致 ⚠"}</p>
     <div class="tablewrap"><table class="tbl prev">
       <thead><tr><th>伝番</th><th>税率</th><th>借方</th><th>貸方</th><th>分野</th><th>取引先</th><th>摘要</th><th class="amt">金額</th><th>印</th></tr></thead>
-      <tbody>${vs.map((vo, i) => voucherRows(vo, i % 2 === 1)).join("")}</tbody></table></div>
+      <tbody>${vs.map((vo, i) => (i === 0 || vs[i - 1].date !== vo.date ? dayBand(vo.date) : "") + voucherRows(vo, i % 2 === 1)).join("")}</tbody></table></div>
     <div class="actions"><button type="button" class="primary" id="pv-close">閉じる</button></div></div>`);
   $("pv-close").addEventListener("click", closeModal);
   $("pv-close").focus();
@@ -825,6 +825,13 @@ function voucherText(vo) {
   return norm(parts.join(" "));
 }
 
+// プレビュー用の日付の帯（例：11/12（木））
+function dayBand(date) {
+  const wd = new Date(date + "T00:00:00").getDay();
+  const wdc = wd === 6 ? "sat" : wd === 0 ? "sun" : "";
+  return `<tr class="day"><td colspan="9"><div class="dh"><span class="d num">${esc(fmtMD(date))}</span> <span class="wd ${wdc}">${WD[wd]}</span></div></td></tr>`;
+}
+
 function voucherRows(vo, alt, check) {
   const debits = vo.lines.filter((l) => l.side === "debit");
   const credits = vo.lines.filter((l) => l.side === "credit");
@@ -850,7 +857,7 @@ function voucherRows(vo, alt, check) {
       <td>${chipOf(credits[i])}</td>
       <td>${first && fd ? `<span class="fd"><b>${esc(fd.no)}</b>${esc(hk(fd.name))}</span>` : ""}</td>
       <td>${first ? esc(hk(vo._partyName || partyLabel(vo.partyId))) : ""}</td>
-      <td>${esc(hk([...new Set([debits[i] && debits[i].memo, credits[i] && credits[i].memo].filter(Boolean))].join(" ／ ")))}${first && vo.late ? ` <span class="chip late">後日記帳 ${esc(fmtMD(vo.entryDate))}</span>` : ""}${first && firstLine.biz === "biz" ? ' <span class="chip biz">事業</span>' : ""}</td>
+      <td class="memo">${esc(hk([...new Set([debits[i] && debits[i].memo, credits[i] && credits[i].memo].filter(Boolean))].join(" ／ ")))}${first && vo.late ? ` <span class="chip late">後日記帳 ${esc(fmtMD(vo.entryDate))}</span>` : ""}${first && firstLine.biz === "biz" ? ' <span class="chip biz">事業</span>' : ""}</td>
       <td class="amt num ${isRev ? "inc" : ""}">${first ? (isRev ? "+" : "") + yen(total) : ""}</td>
       <td class="mk">${first ? esc(vo.mark || "") : ""}</td>
     </tr>`;

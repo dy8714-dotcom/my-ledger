@@ -231,3 +231,6 @@ a.lk { color: inherit; text-decoration: none; } a.lk:hover { text-decoration: un
 .selbar button.danger { margin-left: 0; }
 .seqbar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin: 6px 0 12px; padding: 8px 12px; background: #eef3ff; border-radius: 6px; }
 .dellist { margin: 8px 0; padding-left: 20px; font-size: 13.5px; max-height: 220px; overflow: auto; }
+
+/* 摘要が長いときは折り返す（I1c） */
+.tbl td.memo { white-space: normal; width: 300px; max-width: 300px; overflow-wrap: anywhere; line-height: 1.45; }

@@ -1,7 +1,7 @@
 // 試算表（科目ごとの 月初残高・借方・貸方・残高）
-import { state, loadAllVouchers } from "./state.js?v=0.2I1b";
-import { $, esc, yen, accChip, shiftMonth, showError } from "./util.js?v=0.2I1b";
-import { CATEGORIES } from "./seed.js?v=0.2I1b";
+import { state, loadAllVouchers } from "./state.js?v=0.2I1c";
+import { $, esc, yen, accChip, shiftMonth, showError } from "./util.js?v=0.2I1c";
+import { CATEGORIES } from "./seed.js?v=0.2I1c";
 
 // "26.11" → 通し番号（月ごとに +1）
 const idxOf = (m) => { const [y, mm] = m.split(".").map((x) => parseInt(x, 10)); return y * 12 + (mm - 1); };
