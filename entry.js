@@ -1,13 +1,13 @@
 // 記帳画面（入力欄と仕訳の一覧）
-import { state, col, db, loadParties, loadVouchers, fetchMonthVouchers } from "./state.js?v=0.2I1d";
-import { downloadFullBackup } from "./backup.js?v=0.2I1d";
-import { renderDeprBanner } from "./assets.js?v=0.2I1d";
+import { state, col, db, loadParties, loadVouchers, fetchMonthVouchers } from "./state.js?v=0.2I2c";
+import { downloadFullBackup } from "./backup.js?v=0.2I2c";
+import { renderDeprBanner, askDeprChange, afterDeprEdit } from "./assets.js?v=0.2I2c";
 import { $, esc, norm, hk, yen, parseAmount, WD, ymd, monthOf, shiftMonth, firstDayOf, accChip, openModal, closeModal }
-  from "./util.js?v=0.2I1d";
-import { createCombo } from "./combo.js?v=0.2I1d";
+  from "./util.js?v=0.2I2c";
+import { createCombo } from "./combo.js?v=0.2I2c";
 import { doc, setDoc, updateDoc, deleteDoc, writeBatch, serverTimestamp, increment, arrayUnion, deleteField }
   from "https://www.gstatic.com/firebasejs/13.4.0/firebase-firestore.js";
-import { patternsOf, sortPatterns, describePattern, addPattern, fromTemplate } from "./patterns.js?v=0.2I1d";
+import { patternsOf, sortPatterns, describePattern, addPattern, fromTemplate } from "./patterns.js?v=0.2I2c";
 
 // ---------- 候補の作り方 ----------
 const isBlank = (a) => a.name.startsWith("（") || a.name === "ー";
@@ -507,6 +507,18 @@ function mountVoucherForm(root, { voucher = null, onSaved, onCancel, onDeleted }
     applyBiz(lines);
     const pv = party.getValue();
     const fv = field.getValue().id || "";
+    // 月割り償却で自動で作った仕訳の金額を変えたときは、「今月だけ／来月以降も」をたずねる
+    let deprMode = null, newDebit = 0;
+    if (isEdit && voucher.auto === "depreciation" && voucher.assetId) {
+      const oldDebit = voucher.lines.filter((l) => l.side === "debit").reduce((s, l) => s + l.amount, 0);
+      newDebit = lines.filter((l) => l.side === "debit").reduce((s, l) => s + l.amount, 0);
+      if (newDebit !== oldDebit && !voucher.lump) {
+        saveBtn.disabled = true;
+        deprMode = await askDeprChange(voucher, oldDebit, newDebit, saveBtn.parentElement);
+        saveBtn.disabled = false;
+        if (!deprMode) return;
+      }
+    }
     saveBtn.disabled = true;
     try {
       let partyId = pv.id || "";
@@ -536,6 +548,7 @@ function mountVoucherForm(root, { voucher = null, onSaved, onCancel, onDeleted }
       if (isEdit) id = voucher.id;
       else { id = "v_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 5); data.createdAt = serverTimestamp(); }
       await setDoc(doc(col("vouchers"), id), data, { merge: true });
+      if (deprMode) await afterDeprEdit(voucher, newDebit, deprMode);
       const remember = !!(partyId && !rememberWrap.hidden && rememberEl.checked);
       if (partyId) {
         const upd = { lastUsed: date };

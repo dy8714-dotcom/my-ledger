@@ -1,6 +1,6 @@
 // 月割り償却（手順I2a）：資産の登録と予定表
-import { state, col, db, loadAssets, loadVouchers, fetchMonthVouchers } from "./state.js?v=0.2I1d";
-import { $, esc, yen, ymd, openModal, closeModal, showError } from "./util.js?v=0.2I1d";
+import { state, col, db, loadAssets, loadVouchers, fetchMonthVouchers } from "./state.js?v=0.2I2c";
+import { $, esc, yen, ymd, openModal, closeModal, showError } from "./util.js?v=0.2I2c";
 import { doc, addDoc, updateDoc, writeBatch, arrayUnion, serverTimestamp } from "https://www.gstatic.com/firebasejs/13.4.0/firebase-firestore.js";
 
 // ---------- 計算（画面に依存しない部分） ----------
@@ -53,7 +53,23 @@ export function computeSchedule(a) {
       else if (a.remainderTo === "first") amts[0] = adj; else amts[n - 1] = adj;
     }
   }
-  return { rows: amts.map((v, i) => ({ n: i + 1, month: idxMonth(s + i), amount: v })), error: "" };
+  let rows = amts.map((v, i) => ({ n: i + 1, month: idxMonth(s + i), amount: v }));
+  // 「今月だけ／来月以降も」で変えた月は、その額に固定する。合計が取得額になるよう、固定していない最後の月で調整する
+  if (a.fixed && a.fixed.length) {
+    const fm = new Map(a.fixed.map((f) => [f.month, f.amount]));
+    rows = rows.map((r) => (fm.has(r.month) ? { ...r, amount: fm.get(r.month) } : r));
+    const diff = amount - rows.reduce((t, r) => t + r.amount, 0);
+    if (diff !== 0) {
+      let idx = -1;
+      rows.forEach((r, i) => { if (!fm.has(r.month)) idx = i; });
+      if (idx < 0 || rows[idx].amount + diff < 0) return { rows: [], error: "この金額だと、合計が取得額に合いません。" };
+      rows[idx] = { ...rows[idx], amount: rows[idx].amount + diff };
+      if (rows[idx].amount === 0) { rows.splice(idx, 1); }
+      rows = rows.map((r, i) => ({ ...r, n: i + 1 }));
+    }
+  }
+  rows = rows.filter((r) => r.amount > 0).map((r, i) => ({ ...r, n: i + 1 })); // 0円の月は作らない
+  return { rows, error: "" };
 }
 
 // 各行が「済（手記帳）」「済」「未」のどれかを付ける
@@ -85,7 +101,7 @@ export async function renderAssets() {
     const sc = computeSchedule(a);
     const an = annotate(sc.rows, a);
     const done = an.filter((r) => r.st !== "todo");
-    const left = a.amount - done.reduce((s, r) => s + r.amount, 0);
+    const left = remainingOf(a);
     const next = an.find((r) => r.st === "todo");
     return `<tr><td>${esc(a.name)}</td><td>${esc(a.acquiredDate || "")}</td><td class="amt">${yen(a.amount)}</td>
       <td>${esc(METHOD[a.method] || "")}</td><td>${esc(a.startMonth)}〜${esc(an.length ? an[an.length - 1].month : "")}</td>
@@ -138,6 +154,15 @@ function openForm(a) {
       <label>状態<select id="as-status">${Object.entries(STATUS).map(([k, t]) => `<option value="${k}"${k === v.status ? " selected" : ""}>${t}</option>`).join("")}</select></label>
     </div>
     <p id="as-msg" class="note"></p>
+    ${isEdit && a.status === "active" ? `<details class="lump"><summary>残額を一括処理する（売却・故障・解約のとき）</summary>
+      <div class="fgrid">
+        <label>処理する日<input type="date" id="lp-date" value="${esc(ymd(new Date()))}"></label>
+        <label>借方の科目<select id="lp-acc">${accOptions(lumpAccounts(), byNo(74))}</select></label>
+        <label>残額<input id="lp-amt" value="¥${yen(remainingOf(a))}" disabled></label>
+        <label>摘要<input id="lp-note" value="${esc(a.name)} 残額一括処理"></label>
+      </div>
+      <p class="note">残っている額を、1件の仕訳でまとめて処理し、この資産を「処分」にします。売却して代金を受け取る場合は、この処理のあとで、売却の記帳を別にしてください。</p>
+      <button type="button" class="danger" id="lp-go">残額を一括処理する</button></details>` : ""}
     <div class="tablewrap" style="max-height:300px;overflow:auto"><table class="tbl" style="min-width:0"><thead><tr><th>回</th><th>月度</th><th class="amt">金額</th><th class="amt">累計</th><th class="amt">残り</th><th>状態</th></tr></thead><tbody id="as-sched"></tbody></table></div>
     <div class="actions"><button type="button" class="sub" id="as-cancel">閉じる</button><button type="button" class="primary" id="as-save">${isEdit ? "保存" : "登録する"}</button></div>
   </div>`);
@@ -171,6 +196,20 @@ function openForm(a) {
   document.querySelector("#modal .fgrid").addEventListener("change", redraw);
   redraw();
   $("as-cancel").addEventListener("click", closeModal);
+  if ($("lp-go")) $("lp-go").addEventListener("click", async () => {
+    const date = g("lp-date");
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return ($("as-msg").textContent = "処理する日を入れてください。");
+    $("lp-go").disabled = true;
+    try {
+      await postLump(a, date, g("lp-acc"), g("lp-note").trim());
+      closeModal();
+      renderAssets();
+    } catch (err) {
+      console.error("[残額一括処理]", err);
+      $("lp-go").disabled = false;
+      $("as-msg").textContent = "失敗しました：" + (err.code || err.message);
+    }
+  });
   $("as-save").addEventListener("click", async () => {
     cur = read();
     if (!cur.name) return ($("as-msg").textContent = "品名を入れてください。");
@@ -295,4 +334,106 @@ export async function postDrafts(picks, onStep) {
   }
   state.allVouchers = null;
   await loadVouchers();
+}
+
+
+// ---------- 償却の仕訳の金額を直したとき：「今月だけ」か「来月以降も」（I2c） ----------
+// 直したあとの資産の形を作る（保存はしない）。mode: "once"（その月だけ）／"future"（その月から先の毎月の額も変える）
+export function planChange(a, month, newAmount, mode) {
+  const cur = computeSchedule(a).rows;
+  let fixed = (a.fixed || []).filter((f) => f.month !== month);
+  const a2 = { ...a };
+  if (mode === "future") {
+    // その月までの金額は、いまの予定表のまま固定し、その月だけ新しい額にする。以後の毎月の額を新しい額にする
+    const upto = monthIdx(month);
+    const keep = new Map(fixed.map((f) => [f.month, f.amount]));
+    cur.forEach((r) => { if (monthIdx(r.month) <= upto) keep.set(r.month, r.amount); });
+    keep.set(month, newAmount);
+    fixed = [...keep.entries()].map(([m, v]) => ({ month: m, amount: v }));
+    a2.monthly = newAmount;
+  } else fixed.push({ month, amount: newAmount });
+  a2.fixed = fixed;
+  const sc = computeSchedule(a2);
+  return { asset: a2, error: sc.error, rows: sc.rows };
+}
+
+export async function applyChange(a, plan) {
+  const upd = { fixed: plan.asset.fixed, updatedAt: serverTimestamp() };
+  if (plan.asset.monthly !== a.monthly) upd.monthly = plan.asset.monthly;
+  await updateDoc(doc(col("assets"), a.id), upd);
+  a.fixed = plan.asset.fixed; a.monthly = plan.asset.monthly;
+}
+
+// 記帳画面の修正で、償却の仕訳の金額が変わったとき、保存の前にたずねる。返り値："once" | "future" | null（やめる）
+export function askDeprChange(voucher, oldAmount, newAmount, anchorEl) {
+  const a = (state.assets || []).find((x) => x.id === voucher.assetId);
+  if (!a) return Promise.resolve("once");
+  const pOnce = planChange(a, voucher.month, newAmount, "once");
+  const pFut = a.method === "daily" ? { error: "1日あたりの方法では「来月以降も」は選べません。" } : planChange(a, voucher.month, newAmount, "future");
+  return new Promise((resolve) => {
+    const box = document.createElement("div");
+    box.className = "askbox";
+    box.innerHTML = `<p><strong>月割り償却の金額を変えました</strong>（${esc(a.name)}　${esc(voucher.month)}）：¥${yen(oldAmount)} → ¥${yen(newAmount)}</p>
+      <p class="note">この月の仕訳の金額だけ変えるか、来月以降の毎月の額も変えるかを選んでください。どちらも、合計が取得額になるよう最後の月で調整します。</p>
+      <div class="actions">
+        <button type="button" class="sub" data-c="cancel">やめる</button>
+        <button type="button" class="primary" data-c="once"${pOnce.error ? " disabled" : ""}>今月だけ変える</button>
+        <button type="button" class="primary" data-c="future"${pFut.error ? " disabled" : ""}>来月以降も変える</button>
+      </div>
+      ${pOnce.error || pFut.error ? `<p class="note">${esc(pOnce.error || "")} ${esc(pFut.error || "")}</p>` : ""}
+      ${!pFut.error ? `<p class="note">「来月以降も」にすると、${esc(voucher.month)}の次の月から ¥${yen(newAmount)} ずつ、最終月は ¥${yen(pFut.rows[pFut.rows.length - 1].amount)} になります（全${pFut.rows.length}回）。</p>` : ""}`;
+    anchorEl.insertAdjacentElement("afterend", box);
+    box.addEventListener("click", (e) => {
+      const b = e.target.closest("button[data-c]");
+      if (!b) return;
+      box.remove();
+      resolve(b.dataset.c === "cancel" ? null : b.dataset.c);
+    });
+  });
+}
+
+// 保存したあとに、資産の予定を更新する
+export async function afterDeprEdit(voucher, newAmount, mode) {
+  const a = (state.assets || []).find((x) => x.id === voucher.assetId);
+  if (!a) return;
+  const plan = planChange(a, voucher.month, newAmount, mode);
+  if (!plan.error) await applyChange(a, plan);
+}
+
+// ---------- 残額を一括処理（売却・故障・解約のとき）（I2c） ----------
+export function remainingOf(a) {
+  if (a.status === "disposed") return 0;
+  const an = annotate(computeSchedule(a).rows, a);
+  return a.amount - an.filter((r) => r.st !== "todo").reduce((t, r) => t + r.amount, 0);
+}
+
+export function lumpAccounts() {
+  return state.accounts.filter((x) => !x.hidden && (x.no === 74 || x.category === "評価・特別損益")).sort((p, q) => p.no - q.no);
+}
+
+export async function postLump(a, date, accId, note) {
+  const amount = remainingOf(a);
+  if (!(amount > 0)) throw new Error("処理する残額がありません。");
+  const month = date.slice(2, 4) + "." + parseInt(date.slice(5, 7), 10);
+  const list = await fetchMonthVouchers(month);
+  const seq = Math.max(list.maxSeqAll || 0, ...list.map((v) => v.seq || 0)) + 1;
+  const id = `depr_${a.id}_lump`;
+  const today = ymd(new Date());
+  const memo = note || `${a.name} 残額一括処理`;
+  const biz = (state.accountsById[accId] || {}).biz || "life";
+  const batch = writeBatch(db);
+  batch.set(doc(col("vouchers"), id), {
+    month, seq, date, entryDate: today, late: today > date, fieldId: "", partyId: "", mark: "", auto: "depreciation", lump: true, assetId: a.id,
+    lines: [
+      { side: "debit", accId, amount, tax: 0, memo, tags: [], biz },
+      { side: "credit", accId: a.assetAccId, amount, tax: 0, memo, tags: [], biz }
+    ],
+    createdAt: serverTimestamp(), updatedAt: serverTimestamp()
+  });
+  batch.update(doc(col("assets"), a.id), { status: "disposed", disposedDate: date, disposedNote: memo, posted: arrayUnion({ month, voucherId: id, lump: true }), updatedAt: serverTimestamp() });
+  await batch.commit();
+  a.status = "disposed"; a.disposedDate = date; a.disposedNote = memo; a.posted = [...(a.posted || []), { month, voucherId: id, lump: true }];
+  state.allVouchers = null;
+  await loadVouchers();
+  return { month, seq, amount };
 }
