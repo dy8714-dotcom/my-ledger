@@ -1,13 +1,13 @@
 // 記帳画面（入力欄と仕訳の一覧）
-import { state, col, db, loadParties, loadVouchers, fetchMonthVouchers } from "./state.js?v=0.2I2c";
-import { downloadFullBackup } from "./backup.js?v=0.2I2c";
-import { renderDeprBanner, askDeprChange, afterDeprEdit } from "./assets.js?v=0.2I2c";
+import { state, col, db, loadParties, loadVouchers, fetchMonthVouchers } from "./state.js?v=0.2I3";
+import { downloadFullBackup } from "./backup.js?v=0.2I3";
+import { renderDeprBanner, askDeprChange, afterDeprEdit } from "./assets.js?v=0.2I3";
 import { $, esc, norm, hk, yen, parseAmount, WD, ymd, monthOf, shiftMonth, firstDayOf, accChip, openModal, closeModal }
-  from "./util.js?v=0.2I2c";
-import { createCombo } from "./combo.js?v=0.2I2c";
+  from "./util.js?v=0.2I3";
+import { createCombo } from "./combo.js?v=0.2I3";
 import { doc, setDoc, updateDoc, deleteDoc, writeBatch, serverTimestamp, increment, arrayUnion, deleteField }
   from "https://www.gstatic.com/firebasejs/13.4.0/firebase-firestore.js";
-import { patternsOf, sortPatterns, describePattern, addPattern, fromTemplate } from "./patterns.js?v=0.2I2c";
+import { patternsOf, sortPatterns, describePattern, addPattern, fromTemplate } from "./patterns.js?v=0.2I3";
 
 // ---------- 候補の作り方 ----------
 const isBlank = (a) => a.name.startsWith("（") || a.name === "ー";

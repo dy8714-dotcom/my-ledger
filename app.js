@@ -1,13 +1,14 @@
 // マイ帳簿サイト（ログインと、メニューの切り替え）
 import { GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged }
   from "https://www.gstatic.com/firebasejs/13.4.0/firebase-auth.js";
-import { auth, state, loadAll, loadVouchers } from "./state.js?v=0.2I2c";
-import { $, esc, showError } from "./util.js?v=0.2I2c";
-import { renderSettings } from "./settings.js?v=0.2I2c";
-import { renderEntry } from "./entry.js?v=0.2I2c";
-import { renderTrial } from "./trial.js?v=0.2I2c";
-import { renderLedger } from "./ledger.js?v=0.2I2c";
-import { renderBackupBanner } from "./backup.js?v=0.2I2c";
+import { auth, state, loadAll, loadVouchers } from "./state.js?v=0.2I3";
+import { $, esc, showError } from "./util.js?v=0.2I3";
+import { renderSettings } from "./settings.js?v=0.2I3";
+import { renderEntry } from "./entry.js?v=0.2I3";
+import { renderTrial } from "./trial.js?v=0.2I3";
+import { renderLedger } from "./ledger.js?v=0.2I3";
+import { renderMonthEnd } from "./monthend.js?v=0.2I3";
+import { renderBackupBanner } from "./backup.js?v=0.2I3";
 
 $("btn-login").addEventListener("click", async () => {
   showError("");
@@ -51,6 +52,7 @@ function render() {
   if (state.tab === "entry") return renderEntry();
   if (state.tab === "trial") return renderTrial();
   if (state.tab === "ledger") return renderLedger();
+  if (state.tab === "monthend") return renderMonthEnd();
   if (state.tab === "settings") return renderSettings();
   const names = { trial: "試算表", ledger: "元帳・検索" };
   $("view").innerHTML =

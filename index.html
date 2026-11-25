@@ -4,14 +4,14 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>マイ帳簿サイト</title>
-<link rel="stylesheet" href="style.css?v=0.2I2c">
+<link rel="stylesheet" href="style.css?v=0.2I3">
 </head>
 <body>
 <header>
   <h1>マイ帳簿サイト</h1>
   <div class="header-right">
     <span id="user-email" class="user"></span>
-    <span id="version" class="version">v0.2（手順I2c：償却の修正・残額の一括処理）</span>
+    <span id="version" class="version">v0.2（手順I3：月末タブ（評価替え））</span>
     <button id="btn-logout" type="button" class="header-btn" hidden>ログアウト</button>
   </div>
 </header>
@@ -20,6 +20,7 @@
   <button type="button" data-tab="entry">記帳</button>
   <button type="button" data-tab="trial">試算表</button>
   <button type="button" data-tab="ledger">元帳・検索</button>
+  <button type="button" data-tab="monthend">月末</button>
   <button type="button" data-tab="settings">設定</button>
 </nav>
 
@@ -36,6 +37,6 @@
 
 <div id="modal" hidden></div>
 
-<script type="module" src="app.js?v=0.2I2c"></script>
+<script type="module" src="app.js?v=0.2I3"></script>
 </body>
 </html>
