@@ -40,6 +40,7 @@ export const state = {
   showHidden: false,
   stats: { accField: {}, fieldParty: {} },
   allVouchers: null,
+  assets: [],
   lg: null,
   savedSearches: null,
   lastBackupAt: null,
@@ -89,6 +90,11 @@ export async function loadBackupInfo() {
     const snap = await getDoc(doc(col("meta"), "backup"));
     state.lastBackupAt = snap.exists() ? snap.data().lastAt || null : null;
   } catch (err) { state.lastBackupAt = null; }
+}
+
+export async function loadAssets() {
+  state.assets = toList(await getDocs(col("assets"))).sort((x, y) => (x.acquiredDate || "") < (y.acquiredDate || "") ? -1 : 1);
+  return state.assets;
 }
 
 export async function loadAll() {

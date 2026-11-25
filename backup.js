@@ -1,6 +1,6 @@
 // バックアップ（手順G）：全データのJSON、仕訳のCSV
-import { state, col, loadAllVouchers } from "./state.js?v=0.2I1c";
-import { $, esc, ymd, showError } from "./util.js?v=0.2I1c";
+import { state, col, loadAllVouchers } from "./state.js?v=0.2I2a";
+import { $, esc, ymd, showError } from "./util.js?v=0.2I2a";
 import { getDocs, getDoc, setDoc, doc } from "https://www.gstatic.com/firebasejs/13.4.0/firebase-firestore.js";
 
 export function saveFile(text, filename, mime, bom) {
@@ -25,7 +25,7 @@ function plain(v) {
 
 export async function dumpAll() {
   const out = { app: "my-ledger", format: 1, exportedAt: new Date().toISOString(), uid: state.user.uid };
-  for (const name of ["accounts", "fields", "parties", "vouchers"]) {
+  for (const name of ["accounts", "fields", "parties", "vouchers", "assets"]) {
     const snap = await getDocs(col(name));
     out[name] = snap.docs.map((d) => ({ id: d.id, ...plain(d.data()) }));
   }

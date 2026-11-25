@@ -1,15 +1,16 @@
 // 設定画面（科目・分野の台帳）
-import { state, col, loadAll, loadParties } from "./state.js?v=0.2I1c";
-import { $, esc, norm, hk, showError } from "./util.js?v=0.2I1c";
+import { state, col, loadAll, loadParties } from "./state.js?v=0.2I2a";
+import { $, esc, norm, hk, showError } from "./util.js?v=0.2I2a";
 import { doc, setDoc, writeBatch, serverTimestamp, deleteField }
   from "https://www.gstatic.com/firebasejs/13.4.0/firebase-firestore.js";
 import { SEED_ACCOUNTS, SEED_FIELDS, CATEGORIES, CATEGORY_COLORS, KIND_LABELS, sideOf }
-  from "./seed.js?v=0.2I1c";
-import { db } from "./state.js?v=0.2I1c";
-import { renderImport } from "./importer.js?v=0.2I1c";
-import { renderDeleted } from "./deleted.js?v=0.2I1c";
-import { renderBackup } from "./backup.js?v=0.2I1c";
-import { patternsOf, sortPatterns, describePattern } from "./patterns.js?v=0.2I1c";
+  from "./seed.js?v=0.2I2a";
+import { db } from "./state.js?v=0.2I2a";
+import { renderImport } from "./importer.js?v=0.2I2a";
+import { renderDeleted } from "./deleted.js?v=0.2I2a";
+import { renderAssets } from "./assets.js?v=0.2I2a";
+import { renderBackup } from "./backup.js?v=0.2I2a";
+import { patternsOf, sortPatterns, describePattern } from "./patterns.js?v=0.2I2a";
 
 // ---------- 設定画面 ----------
 export function renderSettings() {
@@ -18,6 +19,7 @@ export function renderSettings() {
       <button type="button" data-sub="accounts" class="${state.sub === "accounts" ? "active" : ""}">科目</button>
       <button type="button" data-sub="fields" class="${state.sub === "fields" ? "active" : ""}">分野</button>
       <button type="button" data-sub="parties" class="${state.sub === "parties" ? "active" : ""}">取引先</button>
+      <button type="button" data-sub="assets" class="${state.sub === "assets" ? "active" : ""}">月割り償却</button>
       <button type="button" data-sub="backup" class="${state.sub === "backup" ? "active" : ""}">バックアップ</button>
       <button type="button" data-sub="import" class="${state.sub === "import" ? "active" : ""}">取り込み</button>
       <button type="button" data-sub="deleted" class="${state.sub === "deleted" ? "active" : ""}">削除した仕訳</button>
@@ -32,6 +34,7 @@ export function renderSettings() {
   });
   if (state.sub === "accounts") renderAccountsPage();
   else if (state.sub === "fields") renderFieldsPage();
+  else if (state.sub === "assets") renderAssets();
   else if (state.sub === "backup") renderBackup();
   else if (state.sub === "import") renderImport();
   else if (state.sub === "deleted") renderDeleted();
