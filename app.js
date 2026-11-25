@@ -1,12 +1,13 @@
 // マイ帳簿サイト（ログインと、メニューの切り替え）
 import { GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged }
   from "https://www.gstatic.com/firebasejs/13.4.0/firebase-auth.js";
-import { auth, state, loadAll, loadVouchers } from "./state.js?v=0.1H3";
-import { $, esc, showError } from "./util.js?v=0.1H3";
-import { renderSettings } from "./settings.js?v=0.1H3";
-import { renderEntry } from "./entry.js?v=0.1H3";
-import { renderTrial } from "./trial.js?v=0.1H3";
-import { renderLedger } from "./ledger.js?v=0.1H3";
+import { auth, state, loadAll, loadVouchers } from "./state.js?v=0.2I1";
+import { $, esc, showError } from "./util.js?v=0.2I1";
+import { renderSettings } from "./settings.js?v=0.2I1";
+import { renderEntry } from "./entry.js?v=0.2I1";
+import { renderTrial } from "./trial.js?v=0.2I1";
+import { renderLedger } from "./ledger.js?v=0.2I1";
+import { renderBackupBanner } from "./backup.js?v=0.2I1";
 
 $("btn-login").addEventListener("click", async () => {
   showError("");
@@ -25,11 +26,12 @@ onAuthStateChanged(auth, async (user) => {
   $("view").hidden = !user;
   $("btn-logout").hidden = !user;
   $("user-email").textContent = user ? user.email : "";
-  if (!user) return;
+  if (!user) { renderBackupBanner(); return; }
   try {
     await loadAll();
     await loadVouchers();
     render();
+    renderBackupBanner();
   } catch (err) {
     showError("データの読み込みに失敗しました：" + err.code);
   }

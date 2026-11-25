@@ -1,14 +1,15 @@
 // 設定画面（科目・分野の台帳）
-import { state, col, loadAll, loadParties } from "./state.js?v=0.1H3";
-import { $, esc, norm, hk, showError } from "./util.js?v=0.1H3";
+import { state, col, loadAll, loadParties } from "./state.js?v=0.2I1";
+import { $, esc, norm, hk, showError } from "./util.js?v=0.2I1";
 import { doc, setDoc, writeBatch, serverTimestamp, deleteField }
   from "https://www.gstatic.com/firebasejs/13.4.0/firebase-firestore.js";
 import { SEED_ACCOUNTS, SEED_FIELDS, CATEGORIES, CATEGORY_COLORS, KIND_LABELS, sideOf }
-  from "./seed.js?v=0.1H3";
-import { db } from "./state.js?v=0.1H3";
-import { renderImport } from "./importer.js?v=0.1H3";
-import { renderBackup } from "./backup.js?v=0.1H3";
-import { patternsOf, sortPatterns, describePattern } from "./patterns.js?v=0.1H3";
+  from "./seed.js?v=0.2I1";
+import { db } from "./state.js?v=0.2I1";
+import { renderImport } from "./importer.js?v=0.2I1";
+import { renderDeleted } from "./deleted.js?v=0.2I1";
+import { renderBackup } from "./backup.js?v=0.2I1";
+import { patternsOf, sortPatterns, describePattern } from "./patterns.js?v=0.2I1";
 
 // ---------- 設定画面 ----------
 export function renderSettings() {
@@ -19,6 +20,7 @@ export function renderSettings() {
       <button type="button" data-sub="parties" class="${state.sub === "parties" ? "active" : ""}">取引先</button>
       <button type="button" data-sub="backup" class="${state.sub === "backup" ? "active" : ""}">バックアップ</button>
       <button type="button" data-sub="import" class="${state.sub === "import" ? "active" : ""}">取り込み</button>
+      <button type="button" data-sub="deleted" class="${state.sub === "deleted" ? "active" : ""}">削除した仕訳</button>
     </div>
     <div id="settings-body"></div>`;
   $("view").querySelector(".subtabs").addEventListener("click", (e) => {
@@ -32,6 +34,7 @@ export function renderSettings() {
   else if (state.sub === "fields") renderFieldsPage();
   else if (state.sub === "backup") renderBackup();
   else if (state.sub === "import") renderImport();
+  else if (state.sub === "deleted") renderDeleted();
   else renderPartiesPage();
 }
 

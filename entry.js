@@ -1,11 +1,11 @@
 // 記帳画面（入力欄と仕訳の一覧）
-import { state, col, loadParties, loadVouchers, fetchMonthVouchers } from "./state.js?v=0.1H3";
+import { state, col, loadParties, loadVouchers, fetchMonthVouchers } from "./state.js?v=0.2I1";
 import { $, esc, norm, hk, yen, parseAmount, WD, ymd, monthOf, shiftMonth, firstDayOf, accChip, openModal, closeModal }
-  from "./util.js?v=0.1H3";
-import { createCombo } from "./combo.js?v=0.1H3";
+  from "./util.js?v=0.2I1";
+import { createCombo } from "./combo.js?v=0.2I1";
 import { doc, setDoc, updateDoc, deleteDoc, serverTimestamp, increment, arrayUnion, deleteField }
   from "https://www.gstatic.com/firebasejs/13.4.0/firebase-firestore.js";
-import { patternsOf, sortPatterns, describePattern, addPattern, fromTemplate } from "./patterns.js?v=0.1H3";
+import { patternsOf, sortPatterns, describePattern, addPattern, fromTemplate } from "./patterns.js?v=0.2I1";
 
 // ---------- 候補の作り方 ----------
 const isBlank = (a) => a.name.startsWith("（") || a.name === "ー";
@@ -72,7 +72,8 @@ const partyLabel = (id) => {
 };
 
 function maxSeq(list) {
-  return list.reduce((m, v) => Math.max(m, v.seq || 0), 0);
+  // 削除済みの伝番も含める（戻したときにぶつからないように、番号は使い回さない）
+  return Math.max(list.maxSeqAll || 0, list.reduce((m, v) => Math.max(m, v.seq || 0), 0));
 }
 
 function defaultDate() {
@@ -585,7 +586,7 @@ function mountVoucherForm(root, { voucher = null, onSaved, onCancel, onDeleted }
       clearTimeout(armed);
       del.disabled = true;
       try {
-        await deleteDoc(doc(col("vouchers"), voucher.id));
+        await updateDoc(doc(col("vouchers"), voucher.id), { deleted: true, deletedAt: Date.now(), updatedAt: serverTimestamp() }); // 完全には消さず「削除済み」にする（30日間は設定から戻せる）
         await loadVouchers();
         if (onDeleted) onDeleted();
       } catch (err) {

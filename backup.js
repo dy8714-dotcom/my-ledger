@@ -1,7 +1,7 @@
 // バックアップ（手順G）：全データのJSON、仕訳のCSV
-import { state, col, loadAllVouchers } from "./state.js?v=0.1H3";
-import { $, esc, ymd, showError } from "./util.js?v=0.1H3";
-import { getDocs, getDoc, doc } from "https://www.gstatic.com/firebasejs/13.4.0/firebase-firestore.js";
+import { state, col, loadAllVouchers } from "./state.js?v=0.2I1";
+import { $, esc, ymd, showError } from "./util.js?v=0.2I1";
+import { getDocs, getDoc, setDoc, doc } from "https://www.gstatic.com/firebasejs/13.4.0/firebase-firestore.js";
 
 export function saveFile(text, filename, mime, bom) {
   const blob = new Blob([(bom ? "﻿" : "") + text], { type: mime });
@@ -39,6 +39,40 @@ export async function dumpAll() {
 
 export const stampNow = () => ymd(new Date()).replace(/-/g, "") + "-" + new Date().toTimeString().slice(0, 5).replace(":", "");
 
+// ---------- バックアップの催促（最後の保存から7日たったら画面に出す） ----------
+export const BACKUP_DAYS = 7;
+const DAY = 24 * 60 * 60 * 1000;
+
+// 全データをJSONでPCに保存し、「最後に保存した日時」を記録する
+export async function downloadFullBackup(prefix = "my-ledger-backup") {
+  const data = await dumpAll();
+  saveFile(JSON.stringify(data, null, 1), `${prefix}-${stampNow()}.json`, "application/json", false);
+  try {
+    state.lastBackupAt = Date.now();
+    await setDoc(doc(col("meta"), "backup"), { lastAt: state.lastBackupAt }, { merge: true });
+  } catch (err) { console.error("[バックアップ] 日時の記録に失敗", err); }
+  renderBackupBanner();
+  return data;
+}
+
+export function renderBackupBanner() {
+  const el = $("backup-banner");
+  if (!el) return;
+  const last = state.lastBackupAt;
+  const days = last ? Math.floor((Date.now() - last) / DAY) : null;
+  if (!state.user || state.backupSnoozed || (last && days < BACKUP_DAYS)) { el.hidden = true; return; }
+  el.hidden = false;
+  el.innerHTML = `<span>${last ? `最後のバックアップから<strong>${days}日</strong>たっています。` : "バックアップを保存した記録がまだありません。"}</span>
+    <button type="button" class="primary" id="bk-now">今すぐ保存（PCにダウンロード）</button>
+    <button type="button" class="sub" id="bk-later">あとで</button><span id="bk-msg" class="note"></span>`;
+  $("bk-later").addEventListener("click", () => { state.backupSnoozed = true; el.hidden = true; });
+  $("bk-now").addEventListener("click", async () => {
+    $("bk-now").disabled = true; $("bk-msg").textContent = "保存中…";
+    try { await downloadFullBackup(); }
+    catch (err) { $("bk-now").disabled = false; $("bk-msg").textContent = ""; showError("バックアップに失敗しました：" + err.message); }
+  });
+}
+
 const q = (x) => `"${String(x ?? "").replace(/"/g, '""')}"`;
 
 // 1明細行＝1行（複合仕訳も、同じ伝番で何行かに分かれる）
@@ -67,6 +101,7 @@ export function renderBackup() {
       <p class="note">データはFirebase（クラウド）に保存されています。念のため、定期的に自分のPCにも保存しておくと安心です。</p>
       <h4>① 全データをPCにダウンロード（JSON）</h4>
       <p class="note">科目・分野・取引先・仕訳・入力パターン・保存した検索を、すべて1つのファイルにまとめます。復元（読み込み）は手順H以降で作ります。</p>
+      <p class="note" id="bk-last"></p>
       <p><button type="button" class="primary" id="bk-json">全データをダウンロード</button> <span id="bk-json-msg" class="note"></span></p>
       <h4>② 仕訳をCSVでダウンロード</h4>
       <p class="note">Excelで開けるCSVです。複合仕訳は同じ伝番の行が複数に分かれます。</p>
@@ -74,12 +109,17 @@ export function renderBackup() {
       <button type="button" class="sub" id="bk-csv">仕訳CSVをダウンロード</button> <span id="bk-csv-msg" class="note"></span></p>
     </div>`;
   const stamp = stampNow;
+  const drawLast = () => {
+    const l = state.lastBackupAt;
+    $("bk-last").textContent = l ? `最後に保存：${ymd(new Date(l))}（${Math.floor((Date.now() - l) / DAY)}日前）。${BACKUP_DAYS}日たつと、画面の上にお知らせが出ます。` : `最後に保存した記録はまだありません。`;
+  };
+  drawLast();
 
   $("bk-json").addEventListener("click", async () => {
     $("bk-json-msg").textContent = "読み込み中…";
     try {
-      const data = await dumpAll();
-      saveFile(JSON.stringify(data, null, 1), `my-ledger-backup-${stamp()}.json`, "application/json", false);
+      const data = await downloadFullBackup();
+      drawLast();
       $("bk-json-msg").textContent = `保存しました（仕訳${data.vouchers.length}件・科目${data.accounts.length}・取引先${data.parties.length}）`;
     } catch (err) { $("bk-json-msg").textContent = ""; showError("バックアップに失敗しました：" + err.message); }
   });

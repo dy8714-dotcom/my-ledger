@@ -4,14 +4,14 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>マイ帳簿サイト</title>
-<link rel="stylesheet" href="style.css?v=0.1H3">
+<link rel="stylesheet" href="style.css?v=0.2I1">
 </head>
 <body>
 <header>
   <h1>マイ帳簿サイト</h1>
   <div class="header-right">
     <span id="user-email" class="user"></span>
-    <span id="version" class="version">v0.1（手順H3：取り込みの修正）</span>
+    <span id="version" class="version">v0.2（手順I1：バックアップの催促・削除の取り消し）</span>
     <button id="btn-logout" type="button" class="header-btn" hidden>ログアウト</button>
   </div>
 </header>
@@ -22,6 +22,8 @@
   <button type="button" data-tab="ledger">元帳・検索</button>
   <button type="button" data-tab="settings">設定</button>
 </nav>
+
+<div id="backup-banner" class="bkbanner" hidden></div>
 
 <main>
   <section id="logged-out">
@@ -34,6 +36,6 @@
 
 <div id="modal" hidden></div>
 
-<script type="module" src="app.js?v=0.1H3"></script>
+<script type="module" src="app.js?v=0.2I1"></script>
 </body>
 </html>

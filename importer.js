@@ -1,7 +1,7 @@
 // 過去データの取り込み（手順H）：仕訳CSV → 検査 → プレビュー → 登録
-import { state, col, db, loadAllVouchers, loadParties, loadStats, loadVouchers } from "./state.js?v=0.1H3";
-import { $, esc, norm, yen, monthOf, showError } from "./util.js?v=0.1H3";
-import { dumpAll, saveFile, stampNow } from "./backup.js?v=0.1H3";
+import { state, col, db, loadAllVouchers, loadParties, loadStats, loadVouchers } from "./state.js?v=0.2I1";
+import { $, esc, norm, yen, monthOf, showError } from "./util.js?v=0.2I1";
+import { downloadFullBackup } from "./backup.js?v=0.2I1";
 import { doc, writeBatch, deleteField }
   from "https://www.gstatic.com/firebasejs/13.4.0/firebase-firestore.js";
 
@@ -341,7 +341,7 @@ async function drawUndo() {
       clearTimeout(armed); btn.disabled = true;
       try {
         $("im-undo-msg").textContent = "消す前のバックアップを保存中…";
-        saveFile(JSON.stringify(await dumpAll(), null, 1), `my-ledger-backup-取り消し前-${stampNow()}.json`, "application/json", false);
+        await downloadFullBackup("my-ledger-backup-取り消し前");
         await undoImport(found, (a, b) => { $("im-undo-msg").textContent = `消去中… ${a}/${b}`; });
         $("im-undo-msg").textContent = "消しました。取り消し前のバックアップはダウンロードフォルダにあります。";
         $("im-result").innerHTML = "";
@@ -374,8 +374,7 @@ function drawPlan(plan, out) {
     try {
       // 取り込みの直前に、いまの全データを自動でPCに保存する（失敗したら取り込まない）
       msg.textContent = "取り込み前のバックアップを保存中…";
-      const snap = await dumpAll();
-      saveFile(JSON.stringify(snap, null, 1), `my-ledger-backup-取り込み前-${stampNow()}.json`, "application/json", false);
+      await downloadFullBackup("my-ledger-backup-取り込み前");
       await commitPlan(plan, (p) => { msg.textContent = `登録中… 取引先 ${p.parties}/${p.partiesTotal}件、仕訳 ${p.vouchers}/${p.total}件`; });
       msg.textContent = `取り込みました（${plan.vouchers.length}件）。取り込み前のバックアップはダウンロードフォルダにあります。記帳・試算表で確認してください。`;
       drawUndo();
