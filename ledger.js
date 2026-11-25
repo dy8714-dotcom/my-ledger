@@ -1,8 +1,8 @@
 // 元帳・検索（条件で絞り込み、科目を1つ選ぶと残高を積み上げて表示）
-import { state, col, loadAllVouchers } from "./state.js?v=0.1F";
-import { $, esc, norm, hk, yen, parseAmount, WD, accChip, showError } from "./util.js?v=0.1F";
-import { createCombo } from "./combo.js?v=0.1F";
-import { openEdit } from "./entry.js?v=0.1F";
+import { state, col, loadAllVouchers } from "./state.js?v=0.1F2";
+import { $, esc, norm, hk, yen, parseAmount, WD, accChip, showError } from "./util.js?v=0.1F2";
+import { createCombo } from "./combo.js?v=0.1F2";
+import { openEdit } from "./entry.js?v=0.1F2";
 import { doc, getDoc, setDoc } from "https://www.gstatic.com/firebasejs/13.4.0/firebase-firestore.js";
 
 const isBlank = (a) => a.name.startsWith("（") || a.name === "ー";
@@ -180,7 +180,7 @@ function drawScreen(all) {
       <p id="lg-msg" class="note"></p>
     </div>
     <div class="panel nopad"><div class="panel-head"><h3><span class="bar"></span><span id="lg-title">結果</span></h3></div>
-      <div class="tablewrap"><table class="tbl lg"><thead id="lg-head"></thead><tbody id="lg-body"></tbody><tfoot id="lg-foot"></tfoot></table></div>
+      <div class="tablewrap lgwrap"><table class="tbl lg"><thead id="lg-head"></thead><tbody id="lg-body"></tbody><tfoot id="lg-foot"></tfoot></table></div>
       <div id="lg-subtotal"></div></div>`;
 
   // --- 科目・分野・取引先のチップ入力 ---
