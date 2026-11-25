@@ -1,12 +1,12 @@
 // 設定画面（科目・分野の台帳）
-import { state, col, loadAll, loadParties } from "./state.js?v=0.1D3";
-import { $, esc, norm, hk, showError } from "./util.js?v=0.1D3";
+import { state, col, loadAll, loadParties } from "./state.js?v=0.1D4";
+import { $, esc, norm, hk, showError } from "./util.js?v=0.1D4";
 import { doc, setDoc, writeBatch, serverTimestamp, deleteField }
   from "https://www.gstatic.com/firebasejs/13.4.0/firebase-firestore.js";
 import { SEED_ACCOUNTS, SEED_FIELDS, CATEGORIES, CATEGORY_COLORS, KIND_LABELS, sideOf }
-  from "./seed.js?v=0.1D3";
-import { db } from "./state.js?v=0.1D3";
-import { patternsOf, sortPatterns, describePattern } from "./patterns.js?v=0.1D3";
+  from "./seed.js?v=0.1D4";
+import { db } from "./state.js?v=0.1D4";
+import { patternsOf, sortPatterns, describePattern } from "./patterns.js?v=0.1D4";
 
 // ---------- 設定画面 ----------
 export function renderSettings() {

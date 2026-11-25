@@ -1,11 +1,11 @@
 // 記帳画面（入力欄と仕訳の一覧）
-import { state, col, loadParties, loadVouchers, fetchMonthVouchers } from "./state.js?v=0.1D3";
+import { state, col, loadParties, loadVouchers, fetchMonthVouchers } from "./state.js?v=0.1D4";
 import { $, esc, norm, hk, yen, parseAmount, WD, ymd, monthOf, shiftMonth, firstDayOf, accChip, openModal, closeModal }
-  from "./util.js?v=0.1D3";
-import { createCombo } from "./combo.js?v=0.1D3";
+  from "./util.js?v=0.1D4";
+import { createCombo } from "./combo.js?v=0.1D4";
 import { doc, setDoc, updateDoc, deleteDoc, serverTimestamp, increment, arrayUnion, deleteField }
   from "https://www.gstatic.com/firebasejs/13.4.0/firebase-firestore.js";
-import { patternsOf, sortPatterns, describePattern, addPattern } from "./patterns.js?v=0.1D3";
+import { patternsOf, sortPatterns, describePattern, addPattern, fromTemplate } from "./patterns.js?v=0.1D4";
 
 // ---------- 候補の作り方 ----------
 const isBlank = (a) => a.name.startsWith("（") || a.name === "ー";
@@ -226,9 +226,27 @@ function mountVoucherForm(root, { voucher = null, onSaved, onCancel, onDeleted }
       debit.setValue(ds[0].accId);
       credit.setValue(cs[0].accId);
       if (!taxTouched) taxEl.value = String(ds[0].tax || 0);
+      const tpl = ds[0].memo || cs[0].memo || "";
+      if (tpl && (force || !memoEl.value.trim())) { memoEl.value = fromTemplate(tpl, dateEl.value); autoMemo = { tpl, text: memoEl.value }; }
     } else {
-      enterDetail(pat.lines);
+      enterDetail(pat.lines.map((l) => ({ ...l, memo: fromTemplate(l.memo, dateEl.value) })));
+      [...ds, ...cs].forEach((l, i) => { if (l.memo && rows[i]) rows[i].auto = { tpl: l.memo, text: rows[i].memoEl.value }; });
     }
+  }
+
+  // 日付を変えたら、自動で入れた摘要の日付も合わせる（手で直した摘要はそのまま）
+  let autoMemo = null;
+  function refreshAutoMemos() {
+    if (autoMemo && memoEl.value === autoMemo.text) {
+      memoEl.value = fromTemplate(autoMemo.tpl, dateEl.value);
+      autoMemo.text = memoEl.value;
+    }
+    rows.forEach((r) => {
+      if (r.auto && r.memoEl.value === r.auto.text) {
+        r.memoEl.value = fromTemplate(r.auto.tpl, dateEl.value);
+        r.auto.text = r.memoEl.value;
+      }
+    });
   }
 
   // ----- 複合仕訳：行ごとの入力 -----
@@ -347,7 +365,7 @@ function mountVoucherForm(root, { voucher = null, onSaved, onCancel, onDeleted }
   });
 
   taxEl.addEventListener("change", () => { taxTouched = true; });
-  dateEl.addEventListener("change", updateSeq);
+  dateEl.addEventListener("change", () => { updateSeq(); refreshAutoMemos(); });
   dateEl.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); focusNext(dateEl); } });
   taxEl.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); focusNext(taxEl); } });
   markEl.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); save(); } });
@@ -386,6 +404,7 @@ function mountVoucherForm(root, { voucher = null, onSaved, onCancel, onDeleted }
 
   function resetForNext() {
     leaveDetail();
+    autoMemo = null;
     debit.clear(); credit.clear(); field.clear(); party.clear();
     memoEl.value = ""; amountEl.value = ""; markEl.value = "";
     taxEl.value = "0"; taxTouched = false;
