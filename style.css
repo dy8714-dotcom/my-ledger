@@ -130,3 +130,20 @@ button.danger:hover { background: #fdecea; }
 .totals { display: flex; gap: 18px; justify-content: flex-end; padding: 10px 16px; background: #f7f5f0; border-top: 1px solid #e2ddd2; font-size: 13px; }
 .totals .ok { color: #1b6431; font-weight: bold; } .totals .ng { color: #b3261e; font-weight: bold; }
 .dialog.wide { max-width: 1100px; }
+
+/* ---------- 手順D-2：複合仕訳・スポット ---------- */
+.lines { margin-top: 12px; border: 1px solid #cdd8ee; background: #f5f8ff; border-radius: 8px; padding: 10px 12px; }
+.lhead, .lrow { display: grid; grid-template-columns: 78px minmax(0, 2fr) 120px 80px minmax(0, 3fr) 36px; gap: 8px; align-items: center; }
+.lhead { font-size: 12px; font-weight: bold; color: #4b5260; padding-bottom: 4px; }
+.lhead .r { text-align: right; }
+.lrow { margin-bottom: 6px; }
+.lrow select, .lrow input[type="text"] { height: 36px; width: 100%; border: 1px solid #cfc9bc; border-radius: 6px; background: #fff; padding: 0 8px; font-size: 14px; font-family: inherit; }
+.lrow .amt { text-align: right; font-weight: bold; font-family: "Roboto Mono", Consolas, monospace; }
+.lrow input:focus, .lrow select:focus { outline: none; border-color: #1a4fb5; box-shadow: 0 0 0 3px rgba(26,79,181,.18); }
+.lrow .x { height: 36px; border: 1px solid #cfc9bc; background: #fff; border-radius: 6px; cursor: pointer; font-size: 16px; color: #777; }
+.lrow .x:hover { background: #fdecea; color: #b3261e; }
+.lfoot { display: flex; gap: 18px; justify-content: flex-end; font-size: 13px; padding-top: 4px; }
+.lfoot .ok { color: #1b6431; font-weight: bold; } .lfoot .ng { color: #b3261e; font-weight: bold; }
+.spot { display: inline-block; font-size: 10.5px; padding: 0 6px; border-radius: 8px; border: 1px solid #c9b88a; color: #6b5300; background: #faf3d9; margin-left: 4px; }
+.chkbox { max-height: 190px; overflow-y: auto; border: 1px solid #cfc9bc; border-radius: 6px; padding: 6px 10px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 2px 12px; }
+.dialog .chk { display: flex; align-items: center; gap: 6px; font-weight: normal; margin: 0; font-size: 13px; color: #222; }

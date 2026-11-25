@@ -1,5 +1,5 @@
 // 入力欄＋候補の一覧（番号・よみ・文字で絞り込み）
-import { esc, norm } from "./util.js?v=0.1D1";
+import { esc, norm } from "./util.js?v=0.1D2";
 
 // 小さいほど上に出す。-1は候補に出さない
 function score(item, q) {
@@ -24,6 +24,7 @@ export function rank(items, q) {
     .sort((a, b) =>
       a.s - b.s ||
       (b.it.boost ? 1 : 0) - (a.it.boost ? 1 : 0) ||
+      (a.it.spot ? 1 : 0) - (b.it.spot ? 1 : 0) ||
       (b.it.count || 0) - (a.it.count || 0) ||
       (a.it.no ?? 1e9) - (b.it.no ?? 1e9) ||
       String(a.it.name).localeCompare(String(b.it.name), "ja"))
@@ -102,6 +103,7 @@ export function createCombo(host, opts) {
   input.addEventListener("input", () => { typed = true; openList(); });
   input.addEventListener("blur", () => { closeList(); restore(); });
   input.addEventListener("keydown", (e) => {
+    if (e.ctrlKey || e.metaKey) return;
     if (e.key === "ArrowDown" || e.key === "ArrowUp") {
       e.preventDefault();
       if (!open) { openList(); return; }

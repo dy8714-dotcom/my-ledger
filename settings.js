@@ -1,11 +1,11 @@
 // 設定画面（科目・分野の台帳）
-import { state, col, loadAll } from "./state.js?v=0.1D1";
-import { $, esc, norm, showError } from "./util.js?v=0.1D1";
+import { state, col, loadAll, loadParties } from "./state.js?v=0.1D2";
+import { $, esc, norm, hk, showError } from "./util.js?v=0.1D2";
 import { doc, setDoc, writeBatch, serverTimestamp }
   from "https://www.gstatic.com/firebasejs/13.4.0/firebase-firestore.js";
 import { SEED_ACCOUNTS, SEED_FIELDS, CATEGORIES, CATEGORY_COLORS, KIND_LABELS, sideOf }
-  from "./seed.js?v=0.1D1";
-import { db } from "./state.js?v=0.1D1";
+  from "./seed.js?v=0.1D2";
+import { db } from "./state.js?v=0.1D2";
 
 // ---------- 設定画面 ----------
 export function renderSettings() {
@@ -13,6 +13,7 @@ export function renderSettings() {
     <div class="subtabs">
       <button type="button" data-sub="accounts" class="${state.sub === "accounts" ? "active" : ""}">科目</button>
       <button type="button" data-sub="fields" class="${state.sub === "fields" ? "active" : ""}">分野</button>
+      <button type="button" data-sub="parties" class="${state.sub === "parties" ? "active" : ""}">取引先</button>
     </div>
     <div id="settings-body"></div>`;
   $("view").querySelector(".subtabs").addEventListener("click", (e) => {
@@ -23,7 +24,8 @@ export function renderSettings() {
     renderSettings();
   });
   if (state.sub === "accounts") renderAccountsPage();
-  else renderFieldsPage();
+  else if (state.sub === "fields") renderFieldsPage();
+  else renderPartiesPage();
 }
 
 function tagHtml(category) {
@@ -332,6 +334,133 @@ function openFieldDialog(fld) {
       await loadAll();
       closeDialog();
       renderFieldsPage();
+    } catch (err) {
+      $("dlg-save").disabled = false;
+      fail("保存に失敗しました：" + err.code);
+    }
+  });
+}
+
+
+// ----- 取引先 -----
+// スポット取引先：一度きりの店用に、店の種類だけを取引先にしたもの（設計書6章）
+const SPOT_SEED = [
+  ["pty_spot_ramen", "ラーメン屋", "らーめんや らーめん", "fld_22"],
+  ["pty_spot_izakaya", "居酒屋", "いざかや", "fld_22"],
+  ["pty_spot_teishoku", "定食屋", "ていしょくや", "fld_22"],
+  ["pty_spot_other", "その他", "そのた", "fld_99"]
+];
+
+function renderPartiesPage() {
+  const body = $("settings-body");
+  const hasSpot = state.parties.some((p) => p.spot);
+  body.innerHTML = `
+    ${hasSpot ? "" : `<div class="seedbox">
+      <p><strong>スポット取引先（一度きりの店用）がまだありません。</strong></p>
+      <p>「ラーメン屋」「居酒屋」「定食屋」「その他」の4つを入れます。店名や食べたものは、摘要に書きます。あとから追加・変更できます。</p>
+      <button type="button" class="primary" id="btn-seed">スポット取引先を入れる</button>
+    </div>`}
+    ${toolbarHtml("取引先を追加")}
+    <table class="list">
+      <thead><tr><th>取引先</th><th>種類</th><th>分野</th><th>よみ・略称</th><th>使用回数</th><th>最終利用</th></tr></thead>
+      <tbody id="tbody"></tbody>
+    </table>
+    <p class="note">取引先は記帳画面で名前を打つと、その場で登録されます。ここでは、よみ・略称、分野、スポットの印などを整えられます。</p>`;
+  if (!hasSpot) $("btn-seed").addEventListener("click", seedSpots);
+  bindToolbar(drawPartyRows, () => openPartyDialog(null));
+  $("tbody").addEventListener("click", (e) => {
+    const tr = e.target.closest("tr[data-id]");
+    if (tr) openPartyDialog(state.partiesById[tr.dataset.id]);
+  });
+  drawPartyRows();
+}
+
+function drawPartyRows() {
+  const q = norm(state.q).trim();
+  const rows = state.parties
+    .filter((p) => {
+      if (p.hidden && !state.showHidden) return false;
+      if (!q) return true;
+      return norm(p.name).includes(q) || norm(p.kana).split(/\s+/).some((w) => w.startsWith(q));
+    })
+    .sort((a, b) => (b.count || 0) - (a.count || 0) || String(a.name).localeCompare(String(b.name), "ja"));
+  $("tbody").innerHTML = rows.map((p) => `
+    <tr data-id="${esc(p.id)}" class="${p.hidden ? "hidden-row" : ""}">
+      <td>${esc(hk(p.name))}${p.hidden ? ' <span class="note">（非表示）</span>' : ""}</td>
+      <td class="small">${p.spot ? '<span class="spot">スポット</span>' : ""}</td>
+      <td class="small">${esc((p.fieldIds || []).map((id) => (state.fieldsById[id] ? hk(state.fieldsById[id].name) : "")).filter(Boolean).join("、"))}</td>
+      <td class="small">${esc(p.kana)}</td>
+      <td class="small" style="text-align:right">${esc(p.count || 0)}</td>
+      <td class="small">${esc(p.lastUsed || "")}</td>
+    </tr>`).join("") || `<tr><td colspan="6" class="small" style="text-align:center;padding:20px">取引先はまだありません。</td></tr>`;
+  $("count").textContent = `${rows.length} 件 / 全${state.parties.length}件`;
+}
+
+async function seedSpots() {
+  $("btn-seed").disabled = true;
+  showError("");
+  try {
+    const batch = writeBatch(db);
+    SPOT_SEED.forEach(([id, name, kana, fid]) => {
+      batch.set(doc(col("parties"), id), {
+        name, kana, fieldIds: state.fieldsById[fid] ? [fid] : [], spot: true, hidden: false, count: 0,
+        createdAt: serverTimestamp()
+      }, { merge: true });
+    });
+    await batch.commit();
+    await loadParties();
+    renderPartiesPage();
+  } catch (err) {
+    showError("登録に失敗しました：" + err.code);
+    $("btn-seed").disabled = false;
+  }
+}
+
+function openPartyDialog(p) {
+  const isNew = !p;
+  const d = p || { name: "", kana: "", fieldIds: [], spot: false, hidden: false };
+  const checks = state.fields.filter((f) => !f.hidden || (d.fieldIds || []).includes(f.id)).map((f) => `
+    <label class="chk"><input type="checkbox" value="${esc(f.id)}" ${(d.fieldIds || []).includes(f.id) ? "checked" : ""}>
+      <span class="num">${esc(f.no)}</span> ${esc(hk(f.name))}</label>`).join("");
+  $("modal").hidden = false;
+  $("modal").innerHTML = `
+    <div class="dialog" role="dialog" aria-modal="true">
+      <h2>${isNew ? "取引先を追加" : "取引先を編集"}</h2>
+      <label for="p-name">取引先名</label>
+      <input type="text" id="p-name" value="${esc(d.name)}">
+      <label for="p-kana">よみ・略称（スペースで区切って複数登録できます）</label>
+      <input type="text" id="p-kana" value="${esc(d.kana)}">
+      <label>所属する分野（複数選べます。記帳で分野を選ぶと、その分野の取引先が上に出ます）</label>
+      <div class="chkbox">${checks}</div>
+      <label class="check"><input type="checkbox" id="p-spot" ${d.spot ? "checked" : ""}> スポット取引先（一度きりの店用。候補の一番下に出ます）</label>
+      <label class="check"><input type="checkbox" id="p-hidden" ${d.hidden ? "checked" : ""}> 非表示にする（候補に出さない。削除はしません）</label>
+      <div id="dlg-error" class="dlg-error" hidden></div>
+      <div class="actions">
+        <button type="button" class="sub" id="dlg-cancel">キャンセル</button>
+        <button type="button" class="primary" id="dlg-save">保存</button>
+      </div>
+    </div>`;
+  $("dlg-cancel").addEventListener("click", closeDialog);
+  $("dlg-save").addEventListener("click", async () => {
+    const fail = (m) => { $("dlg-error").textContent = m; $("dlg-error").hidden = false; };
+    const name = $("p-name").value.trim();
+    if (!name) return fail("取引先名を入れてください。");
+    if (state.parties.some((x) => norm(x.name) === norm(name) && x.id !== (p && p.id))) {
+      return fail(`「${name}」は、すでに登録されています。`);
+    }
+    const fieldIds = [...document.querySelectorAll(".chkbox input:checked")].map((x) => x.value);
+    const data = {
+      name, kana: $("p-kana").value.trim(), fieldIds,
+      spot: $("p-spot").checked, hidden: $("p-hidden").checked, updatedAt: serverTimestamp()
+    };
+    const id = p ? p.id : "pty_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 5);
+    if (!p) { data.createdAt = serverTimestamp(); data.count = 0; }
+    $("dlg-save").disabled = true;
+    try {
+      await setDoc(doc(col("parties"), id), data, { merge: true });
+      await loadParties();
+      closeDialog();
+      renderPartiesPage();
     } catch (err) {
       $("dlg-save").disabled = false;
       fail("保存に失敗しました：" + err.code);
