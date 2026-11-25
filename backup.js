@@ -1,6 +1,6 @@
 // バックアップ（手順G）：全データのJSON、仕訳のCSV
-import { state, col, loadAllVouchers } from "./state.js?v=0.2I1";
-import { $, esc, ymd, showError } from "./util.js?v=0.2I1";
+import { state, col, loadAllVouchers } from "./state.js?v=0.2I1b";
+import { $, esc, ymd, showError } from "./util.js?v=0.2I1b";
 import { getDocs, getDoc, setDoc, doc } from "https://www.gstatic.com/firebasejs/13.4.0/firebase-firestore.js";
 
 export function saveFile(text, filename, mime, bom) {

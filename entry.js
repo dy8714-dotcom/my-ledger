@@ -1,11 +1,12 @@
 // 記帳画面（入力欄と仕訳の一覧）
-import { state, col, loadParties, loadVouchers, fetchMonthVouchers } from "./state.js?v=0.2I1";
+import { state, col, db, loadParties, loadVouchers, fetchMonthVouchers } from "./state.js?v=0.2I1b";
+import { downloadFullBackup } from "./backup.js?v=0.2I1b";
 import { $, esc, norm, hk, yen, parseAmount, WD, ymd, monthOf, shiftMonth, firstDayOf, accChip, openModal, closeModal }
-  from "./util.js?v=0.2I1";
-import { createCombo } from "./combo.js?v=0.2I1";
-import { doc, setDoc, updateDoc, deleteDoc, serverTimestamp, increment, arrayUnion, deleteField }
+  from "./util.js?v=0.2I1b";
+import { createCombo } from "./combo.js?v=0.2I1b";
+import { doc, setDoc, updateDoc, deleteDoc, writeBatch, serverTimestamp, increment, arrayUnion, deleteField }
   from "https://www.gstatic.com/firebasejs/13.4.0/firebase-firestore.js";
-import { patternsOf, sortPatterns, describePattern, addPattern, fromTemplate } from "./patterns.js?v=0.2I1";
+import { patternsOf, sortPatterns, describePattern, addPattern, fromTemplate } from "./patterns.js?v=0.2I1b";
 
 // ---------- 候補の作り方 ----------
 const isBlank = (a) => a.name.startsWith("（") || a.name === "ー";
@@ -616,6 +617,7 @@ export function renderEntry() {
       <div id="entry-form"></div>
     </section>
     <section class="panel nopad">
+      <div id="selbar" class="selbar" hidden></div>
       <div class="panel-head">
         <h3><span class="bar"></span><span id="list-title"></span></h3>
         <label class="note" for="list-q">絞り込み</label>
@@ -624,7 +626,7 @@ export function renderEntry() {
       <div class="tablewrap">
         <table class="tbl">
           <thead><tr>
-            <th>伝番</th><th>税率</th><th>借方</th><th>貸方</th><th>分野</th><th>取引先</th><th>摘要</th><th class="amt">金額</th><th>印</th>
+            <th class="chk"><input type="checkbox" id="sel-all" aria-label="表示中の仕訳をすべて選ぶ" title="表示中をすべて選ぶ／外す"></th><th>伝番</th><th>税率</th><th>借方</th><th>貸方</th><th>分野</th><th>取引先</th><th>摘要</th><th class="amt">金額</th><th>印</th>
           </tr></thead>
           <tbody id="vbody"></tbody>
         </table>
@@ -634,7 +636,20 @@ export function renderEntry() {
   $("m-prev").addEventListener("click", () => changeMonth(-1));
   $("m-next").addEventListener("click", () => changeMonth(1));
   $("list-q").addEventListener("input", drawList);
+  $("sel-all").addEventListener("change", (e) => {
+    if (e.target.checked) curList.forEach((vo) => sel.add(vo.id)); else curList.forEach((vo) => sel.delete(vo.id));
+    drawList();
+  });
   $("vbody").addEventListener("click", (e) => {
+    const cell = e.target.closest("td.chk");
+    if (cell) {
+      const id = cell.parentElement.dataset.vid;
+      const input = cell.querySelector("input");
+      if (!input) return;
+      if (e.target !== input) input.checked = !input.checked;
+      toggleSel(id, input.checked, e.shiftKey);
+      return;
+    }
     const tr = e.target.closest("tr[data-vid]");
     if (!tr) return;
     const vo = state.vouchers.find((x) => x.id === tr.dataset.vid);
@@ -645,6 +660,7 @@ export function renderEntry() {
 }
 
 async function changeMonth(delta) {
+  sel.clear(); lastSelId = null; // 月をまたいだ選択はしない
   state.month = shiftMonth(state.month, delta);
   state.lastDate = null;
   try {
@@ -656,16 +672,142 @@ async function changeMonth(delta) {
   renderEntry();
 }
 
-export function openEdit(vo, after) {
+export function openEdit(vo, after, seq) {
   const done = after || renderEntry;
   $("error").hidden = true;
   openModal(`<div class="dialog wide" role="dialog" aria-modal="true">
-    <h2>仕訳を修正（${esc(vo.month)}-${esc(vo.seq)}）</h2><div id="edit-form"></div></div>`);
+    <h2>仕訳を修正（${esc(vo.month)}-${esc(vo.seq)}）</h2>
+    ${seq ? `<div class="seqbar"><strong>${seq.i}／${seq.n}件目</strong>
+      <button type="button" class="sub" id="seq-skip">この仕訳は直さず次へ</button>
+      <button type="button" class="sub" id="seq-stop">ここで終了</button></div>` : ""}
+    <div id="edit-form"></div></div>`);
+  if (seq) {
+    $("seq-skip").addEventListener("click", () => { closeModal(); seq.onSkip(); });
+    $("seq-stop").addEventListener("click", () => { closeModal(); seq.onStop(); });
+  }
   mountVoucherForm($("edit-form"), {
     voucher: vo,
     onSaved: () => { closeModal(); done(); },
-    onCancel: closeModal,
+    onCancel: () => { closeModal(); if (seq) seq.onStop(); },
     onDeleted: () => { closeModal(); done(); }
+  });
+}
+
+// ---------- 選んだ仕訳の一括操作（手順I1b） ----------
+const sel = new Set();      // 選んだ仕訳のid（表示中の月度だけ）
+let lastSelId = null;       // Shift+クリックの範囲選択の起点
+let curList = [];           // いま表示している（絞り込み後の）仕訳
+
+function toggleSel(id, on, shift) {
+  if (shift && lastSelId && lastSelId !== id) {
+    const a = curList.findIndex((x) => x.id === lastSelId), b = curList.findIndex((x) => x.id === id);
+    if (a >= 0 && b >= 0) {
+      const [lo, hi] = a < b ? [a, b] : [b, a];
+      for (let i = lo; i <= hi; i++) { if (on) sel.add(curList[i].id); else sel.delete(curList[i].id); }
+    }
+  } else if (on) sel.add(id); else sel.delete(id);
+  lastSelId = id;
+  drawList();
+}
+
+function selectedVouchers() {
+  return state.vouchers.filter((vo) => sel.has(vo.id));
+}
+
+function drawSelBar() {
+  const bar = $("selbar");
+  if (!bar) return;
+  const vs = selectedVouchers();
+  const all = $("sel-all");
+  if (all) {
+    const n = curList.filter((vo) => sel.has(vo.id)).length;
+    all.checked = curList.length > 0 && n === curList.length;
+    all.indeterminate = n > 0 && n < curList.length;
+  }
+  if (!vs.length) { bar.hidden = true; bar.innerHTML = ""; return; }
+  const total = vs.reduce((s, vo) => s + vo.lines.filter((l) => l.side === "debit").reduce((x, l) => x + l.amount, 0), 0);
+  bar.hidden = false;
+  bar.innerHTML = `<span><strong>${vs.length}件</strong>を選択中（借方計 ¥${yen(total)}）</span>
+    <button type="button" class="sub" id="sel-prev">選んだ分をプレビュー</button>
+    <button type="button" class="sub" id="sel-edit">順に修正</button>
+    <button type="button" class="danger" id="sel-del">まとめて削除</button>
+    <button type="button" class="sub" id="sel-clear">選択を解除</button>`;
+  $("sel-clear").addEventListener("click", () => { sel.clear(); lastSelId = null; drawList(); });
+  $("sel-prev").addEventListener("click", previewSelected);
+  $("sel-edit").addEventListener("click", editSelected);
+  $("sel-del").addEventListener("click", deleteSelected);
+}
+
+function previewSelected() {
+  const vs = selectedVouchers();
+  if (!vs.length) return;
+  const d = vs.reduce((s, vo) => s + vo.lines.filter((l) => l.side === "debit").reduce((x, l) => x + l.amount, 0), 0);
+  const c = vs.reduce((s, vo) => s + vo.lines.filter((l) => l.side === "credit").reduce((x, l) => x + l.amount, 0), 0);
+  openModal(`<div class="dialog wide" role="dialog" aria-modal="true">
+    <h2>選んだ仕訳のプレビュー（${vs.length}件）</h2>
+    <p class="note">借方計 ¥${yen(d)} ／ 貸方計 ¥${yen(c)} ${d === c ? "一致 ✓" : "不一致 ⚠"}</p>
+    <div class="tablewrap"><table class="tbl prev">
+      <thead><tr><th>伝番</th><th>税率</th><th>借方</th><th>貸方</th><th>分野</th><th>取引先</th><th>摘要</th><th class="amt">金額</th><th>印</th></tr></thead>
+      <tbody>${vs.map((vo, i) => voucherRows(vo, i % 2 === 1)).join("")}</tbody></table></div>
+    <div class="actions"><button type="button" class="primary" id="pv-close">閉じる</button></div></div>`);
+  $("pv-close").addEventListener("click", closeModal);
+  $("pv-close").focus();
+}
+
+function editSelected() {
+  const ids = selectedVouchers().map((vo) => vo.id);
+  if (!ids.length) return;
+  const n = ids.length;
+  const finish = () => { sel.clear(); lastSelId = null; renderEntry(); };
+  const step = (k) => {
+    while (k < n && !state.vouchers.find((x) => x.id === ids[k])) k++; // 月度が変わるなどで見えなくなった分は飛ばす
+    if (k >= n) return finish();
+    const vo = state.vouchers.find((x) => x.id === ids[k]);
+    openEdit(vo, () => step(k + 1), { i: k + 1, n, onSkip: () => step(k + 1), onStop: finish });
+  };
+  step(0);
+}
+
+function deleteSelected() {
+  const vs = selectedVouchers();
+  if (!vs.length) return;
+  const list = vs.slice(0, 12).map((vo) => {
+    const t = vo.lines.filter((l) => l.side === "debit").reduce((x, l) => x + l.amount, 0);
+    return `<li>${esc(vo.month + "-" + vo.seq)}　${esc(fmtMD(vo.date))}　${esc(hk(partyLabel(vo.partyId)))}　¥${yen(t)}</li>`;
+  }).join("");
+  openModal(`<div class="dialog" role="dialog" aria-modal="true">
+    <h2>${vs.length}件の仕訳を削除します</h2>
+    <ul class="dellist">${list}${vs.length > 12 ? `<li>…ほか${vs.length - 12}件</li>` : ""}</ul>
+    <p class="note">削除の直前に、全データのバックアップ（JSONファイル）が自動でダウンロードされます。削除した仕訳は30日間、「設定」→「削除した仕訳」から元に戻せます。</p>
+    <p id="dl-msg" class="note"></p>
+    <div class="actions">
+      <button type="button" class="sub" id="dl-cancel">やめる</button>
+      <button type="button" class="danger" id="dl-ok">バックアップして削除する</button>
+    </div></div>`);
+  $("dl-cancel").addEventListener("click", closeModal);
+  $("dl-ok").addEventListener("click", async () => {
+    $("dl-ok").disabled = true; $("dl-cancel").disabled = true;
+    const m = $("dl-msg");
+    try {
+      m.textContent = "バックアップを保存しています…";
+      await downloadFullBackup("my-ledger-backup-一括削除前");
+      const ids = vs.map((vo) => vo.id);
+      for (let i = 0; i < ids.length; i += 400) {
+        m.textContent = `削除しています… ${Math.min(i + 400, ids.length)}／${ids.length}`;
+        const batch = writeBatch(db);
+        ids.slice(i, i + 400).forEach((id) => batch.update(doc(col("vouchers"), id), { deleted: true, deletedAt: Date.now(), updatedAt: serverTimestamp() }));
+        await batch.commit();
+      }
+      await loadVouchers();
+      sel.clear(); lastSelId = null;
+      closeModal();
+      renderEntry();
+    } catch (err) {
+      console.error("[一括削除]", err);
+      m.textContent = "失敗しました：" + (err.code || err.message) + "（途中まで削除されている可能性があります。一覧を確認してください）";
+      $("dl-cancel").disabled = false; $("dl-cancel").textContent = "閉じる";
+      loadVouchers().then(drawList).catch(() => {});
+    }
   });
 }
 
@@ -683,7 +825,7 @@ function voucherText(vo) {
   return norm(parts.join(" "));
 }
 
-function voucherRows(vo, alt) {
+function voucherRows(vo, alt, check) {
   const debits = vo.lines.filter((l) => l.side === "debit");
   const credits = vo.lines.filter((l) => l.side === "credit");
   const n = Math.max(debits.length, credits.length);
@@ -691,7 +833,7 @@ function voucherRows(vo, alt) {
   const total = debits.reduce((s, l) => s + l.amount, 0);
   const firstLine = vo.lines[0] || {};
   const isRev = credits.some((l) => (state.accountsById[l.accId] || {}).kind === "revenue");
-  const cls = (multi ? "cmp " : "") + (alt ? "alt" : "");
+  const cls = (multi ? "cmp " : "") + (alt ? "alt " : "") + (check && sel.has(vo.id) ? "sel" : "");
   const chipOf = (l) => {
     const a = l && state.accountsById[l.accId];
     return a ? accChip(a) + (multi ? ` <span class="num muted">${yen(l.amount)}</span>` : "") : "";
@@ -701,6 +843,7 @@ function voucherRows(vo, alt) {
   for (let i = 0; i < n; i++) {
     const first = i === 0;
     html += `<tr data-vid="${esc(vo.id)}" class="${cls}">
+      ${check ? `<td class="chk">${first ? `<input type="checkbox" aria-label="この仕訳を選ぶ"${sel.has(vo.id) ? " checked" : ""}>` : ""}</td>` : ""}
       <td class="num muted ${multi && first ? "first" : ""}">${first ? esc(vo.month + "-" + vo.seq) : ""}</td>
       <td>${(() => { const l = debits[i] || credits[i] || {}; return multi || first ? (l.tax ? esc(l.tax) + "%" : "ー") : ""; })()}</td>
       <td>${chipOf(debits[i])}</td>
@@ -721,6 +864,8 @@ function drawList() {
   $("m-title").textContent = `${state.month}月度`;
   const qv = norm($("list-q").value).trim();
   const list = state.vouchers.filter((vo) => !qv || voucherText(vo).includes(qv));
+  curList = list;
+  for (const id of [...sel]) if (!state.vouchers.some((x) => x.id === id)) sel.delete(id);
   titleEl.textContent = `${state.month}月度の仕訳  ${list.length}件${qv ? `（全${state.vouchers.length}件）` : ""}`;
   let html = "";
   let curDate = "";
@@ -738,18 +883,19 @@ function drawList() {
       }));
       const wd = new Date(curDate + "T00:00:00").getDay();
       const wdc = wd === 6 ? "sat" : wd === 0 ? "sun" : "";
-      html += `<tr class="day"><td colspan="9"><div class="dh"><span class="d num">${esc(fmtMD(curDate))}</span>
+      html += `<tr class="day"><td colspan="10"><div class="dh"><span class="d num">${esc(fmtMD(curDate))}</span>
         <span class="wd ${wdc}">${WD[wd]}</span>
         <span class="pill out">支出 <span class="num">¥${yen(out)}</span></span>
         <span class="pill inc">収入 <span class="num">¥${yen(inc)}</span></span>
         <span class="note">${day.length}件</span></div></td></tr>`;
       altIdx = 0;
     }
-    html += voucherRows(vo, altIdx % 2 === 1);
+    html += voucherRows(vo, altIdx % 2 === 1, true);
     altIdx++;
   });
-  if (!list.length) html = `<tr><td colspan="9" class="empty">この月度の仕訳はまだありません。</td></tr>`;
+  if (!list.length) html = `<tr><td colspan="10" class="empty">この月度の仕訳はまだありません。</td></tr>`;
   $("vbody").innerHTML = html;
+  drawSelBar();
   let dt = 0, ct = 0;
   state.vouchers.forEach((vo) => vo.lines.forEach((l) => { if (l.side === "debit") dt += l.amount; else ct += l.amount; }));
   $("totals").innerHTML = `<span class="note">この月度の借方合計 ¥${yen(dt)}／貸方合計 ¥${yen(ct)}</span>
