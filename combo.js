@@ -1,5 +1,5 @@
 // 入力欄＋候補の一覧（番号・よみ・文字で絞り込み）
-import { esc, norm } from "./util.js?v=0.1H";
+import { esc, norm } from "./util.js?v=0.1H2";
 
 // 小さいほど上に出す。-1は候補に出さない
 function score(item, q) {

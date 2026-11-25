@@ -1,6 +1,7 @@
 // 過去データの取り込み（手順H）：仕訳CSV → 検査 → プレビュー → 登録
-import { state, col, db, loadAllVouchers, loadParties, loadStats, loadVouchers } from "./state.js?v=0.1H";
-import { $, esc, norm, yen, monthOf, showError } from "./util.js?v=0.1H";
+import { state, col, db, loadAllVouchers, loadParties, loadStats, loadVouchers } from "./state.js?v=0.1H2";
+import { $, esc, norm, yen, monthOf, showError } from "./util.js?v=0.1H2";
+import { dumpAll, saveFile, stampNow } from "./backup.js?v=0.1H2";
 import { doc, writeBatch, serverTimestamp, increment, arrayUnion }
   from "https://www.gstatic.com/firebasejs/13.4.0/firebase-firestore.js";
 
@@ -34,7 +35,7 @@ export function parseCsv(text) {
 
 const COLS = {
   date: ["日付"], no: ["伝番"], side: ["借貸"], accNo: ["科目番号"], accName: ["科目"], amount: ["金額"],
-  tax: ["税率", "税区分"], memo: ["摘要"], field: ["分野"], party: ["取引先"], biz: ["事業"], mark: ["印"], entry: ["記帳日"]
+  tax: ["税率", "税区分"], memo: ["摘要"], tags: ["タグ"], field: ["分野"], party: ["取引先"], biz: ["事業"], mark: ["印"], entry: ["記帳日"]
 };
 
 const t = (s) => String(s ?? "").normalize("NFKC").trim();
@@ -119,12 +120,13 @@ export function buildPlan(rows, ctx, existing) {
       const tx = t(get(r, "tax")).replace(/%$/, "");
       const tax = tx === "" || tx === "ー" || tx === "-" ? 0 : parseInt(tx, 10);
       if (![0, 8, 10].includes(tax)) err(where, `税率「${get(r, "tax")}」は 空欄・8・10 のどれかにしてください。`);
+      const tags = [...new Set(t(get(r, "tags")).split(/[・、,，]/).map((x) => x.trim()).filter(Boolean))];
       const bz = t(get(r, "biz"));
       const biz = bz === "事業" || bz === "biz" ? "biz" : bz === "生活" || bz === "life" ? "life" : "";
       if (!acc) continue;
       const amount = parseInt(amt, 10);
       if (side === "debit") d += amount; else c += amount;
-      lines.push({ side, accId: acc.id, amount, tax, memo: t(get(r, "memo")), tags: [], biz, _acc: acc });
+      lines.push({ side, accId: acc.id, amount, tax, memo: t(get(r, "memo")), tags, biz, _acc: acc });
     }
     if (d !== c) err(`伝番 ${g.no}`, `借方${yen(d)}と貸方${yen(c)}が合いません（差 ${yen(Math.abs(d - c))}）。`);
     if (!lines.some((l) => l.side === "debit") || !lines.some((l) => l.side === "credit")) err(`伝番 ${g.no}`, "借方と貸方の両方が必要です。");
@@ -207,7 +209,7 @@ export function renderImport() {
   $("settings-body").innerHTML = `
     <div class="card" style="max-width:900px">
       <h3>過去データの取り込み</h3>
-      <p class="note">仕訳CSV（バックアップで出すCSVと同じ形）を読み込みます。まず検査とプレビューだけを行い、エラーが0件のときだけ「取り込む」が押せます。</p>
+      <p class="note">仕訳CSV（バックアップで出すCSVと同じ形）を読み込みます。まず検査とプレビューだけを行い、エラーが0件のときだけ「取り込む」が押せます。取り込む直前に、いまの全データを自動でPCにバックアップします。</p>
       <p><input type="file" id="im-file" accept=".csv,text/csv"></p>
       <div id="im-result"></div>
     </div>`;
@@ -245,8 +247,12 @@ function drawPlan(plan, out) {
   if (go) go.addEventListener("click", async () => {
     go.disabled = true;
     try {
+      // 取り込みの直前に、いまの全データを自動でPCに保存する（失敗したら取り込まない）
+      $("im-msg").textContent = "取り込み前のバックアップを保存中…";
+      const snap = await dumpAll();
+      saveFile(JSON.stringify(snap, null, 1), `my-ledger-backup-取り込み前-${stampNow()}.json`, "application/json", false);
       await commitPlan(plan, (a, b) => { $("im-msg").textContent = `登録中… ${a}/${b}`; });
-      $("im-msg").textContent = `取り込みました（${plan.vouchers.length}件）。記帳・試算表で確認してください。`;
-    } catch (err) { go.disabled = false; $("im-msg").textContent = ""; showError("取り込みに失敗しました：" + (err.code || err.message) + "（途中まで登録された可能性があります。バックアップと突き合わせてください）"); }
+      $("im-msg").textContent = `取り込みました（${plan.vouchers.length}件）。取り込み前のバックアップはダウンロードフォルダにあります。記帳・試算表で確認してください。`;
+    } catch (err) { go.disabled = false; $("im-msg").textContent = ""; showError("取り込みに失敗しました：" + (err.code || err.message) + "（途中まで登録された可能性があります。取り込み前のバックアップと突き合わせてください）"); }
   });
 }

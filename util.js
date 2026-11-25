@@ -1,5 +1,5 @@
 // 共通の小さな道具
-import { CATEGORY_COLORS } from "./seed.js?v=0.1H";
+import { CATEGORY_COLORS } from "./seed.js?v=0.1H2";
 
 export const $ = (id) => document.getElementById(id);
 
