@@ -157,3 +157,6 @@ button.danger:hover { background: #fdecea; }
 .patlist { margin-top: 6px; }
 .patrow { display: flex; align-items: center; gap: 10px; padding: 6px 0; border-bottom: 1px solid #eee; font-size: 13px; }
 .patrow > span:first-child { flex: 1; }
+.tbl.prev tr[data-vid] { cursor: default; }
+.tbl.prev tr[data-vid]:hover td { background: #fff; }
+.tbl.prev tr.cmp:hover td { background: #f5f8ff; }

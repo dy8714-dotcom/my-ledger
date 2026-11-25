@@ -1,11 +1,11 @@
 // 記帳画面（入力欄と仕訳の一覧）
-import { state, col, loadParties, loadVouchers, fetchMonthVouchers } from "./state.js?v=0.1D4";
+import { state, col, loadParties, loadVouchers, fetchMonthVouchers } from "./state.js?v=0.1D5";
 import { $, esc, norm, hk, yen, parseAmount, WD, ymd, monthOf, shiftMonth, firstDayOf, accChip, openModal, closeModal }
-  from "./util.js?v=0.1D4";
-import { createCombo } from "./combo.js?v=0.1D4";
+  from "./util.js?v=0.1D5";
+import { createCombo } from "./combo.js?v=0.1D5";
 import { doc, setDoc, updateDoc, deleteDoc, serverTimestamp, increment, arrayUnion, deleteField }
   from "https://www.gstatic.com/firebasejs/13.4.0/firebase-firestore.js";
-import { patternsOf, sortPatterns, describePattern, addPattern, fromTemplate } from "./patterns.js?v=0.1D4";
+import { patternsOf, sortPatterns, describePattern, addPattern, fromTemplate } from "./patterns.js?v=0.1D5";
 
 // ---------- 候補の作り方 ----------
 const isBlank = (a) => a.name.startsWith("（") || a.name === "ー";
@@ -116,6 +116,7 @@ function mountVoucherForm(root, { voucher = null, onSaved, onCancel, onDeleted }
       <button type="button" class="primary" data-k="save">${isEdit ? "保存" : "登録"}</button>
       <label class="remember" data-k="rememberwrap" hidden><input type="checkbox" data-k="remember"> <span data-k="rememberlabel"></span></label>
       <button type="button" class="sub" data-k="addline">＋ 行を追加</button>
+      ${isEdit ? "" : '<button type="button" class="sub" data-k="preview">プレビュー</button>'}
       ${isEdit ? '<button type="button" class="sub" data-k="cancel">キャンセル</button>' : ""}
       ${isEdit ? '<button type="button" class="danger" data-k="delete">削除</button>' : ""}
       <span class="vmsg" data-k="msg"></span>
@@ -360,6 +361,7 @@ function mountVoucherForm(root, { voucher = null, onSaved, onCancel, onDeleted }
   }
 
   q("addline").addEventListener("click", addLine);
+  if (!isEdit) q("preview").addEventListener("click", preview);
   root.addEventListener("keydown", (e) => {
     if (e.ctrlKey && e.key === "ArrowDown") { e.preventDefault(); addLine(); }
   });
@@ -449,6 +451,48 @@ function mountVoucherForm(root, { voucher = null, onSaved, onCancel, onDeleted }
     return { lines };
   }
 
+  function applyBiz(lines) {
+    const isPL = (a) => a && (a.kind === "expense" || a.kind === "revenue");
+    const plFirst = lines.map((l) => state.accountsById[l.accId]).find(isPL);
+    lines.forEach((l) => {
+      const a = state.accountsById[l.accId];
+      l.biz = isPL(a) ? a.biz || "life" : plFirst ? plFirst.biz || "life" : "life";
+    });
+  }
+
+  // プレビュー：登録するとこう見える、を一覧と同じ形で見せる
+  function preview() {
+    msg("");
+    const date = dateEl.value;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return msg("日付を入れてください。");
+    const built = buildLines();
+    if (built.error) return msg(built.error);
+    const lines = built.lines;
+    applyBiz(lines);
+    const pv = party.getValue();
+    const month = monthOf(date);
+    const seq = month === state.month ? maxSeq(state.vouchers) + 1 : "自動";
+    const vo = {
+      id: "preview", month, seq, date, entryDate: ymd(new Date()), late: ymd(new Date()) > date,
+      fieldId: field.getValue().id || "", partyId: pv.id || "", _partyName: pv.newName || "", mark: markEl.value, lines
+    };
+    const d = lines.filter((l) => l.side === "debit").reduce((x, l) => x + l.amount, 0);
+    const wd = new Date(date + "T00:00:00").getDay();
+    openModal(`<div class="dialog wide" role="dialog" aria-modal="true">
+      <h2>プレビュー（この内容で登録します）</h2>
+      <p class="note">${esc(fmtMD(date))}（${WD[wd]}）　借方計 ¥${yen(d)} ／ 貸方計 ¥${yen(d)} ✓　${pv.newName ? `※取引先「${esc(pv.newName)}」は新規登録されます　` : ""}${!rememberWrap.hidden && rememberEl.checked ? "※この形を入力パターンとして覚えます" : ""}</p>
+      <div class="tablewrap"><table class="tbl prev">
+        <thead><tr><th>伝番</th><th>税率</th><th>借方</th><th>貸方</th><th>分野</th><th>取引先</th><th>摘要</th><th class="amt">金額</th><th>印</th></tr></thead>
+        <tbody>${voucherRows(vo, false)}</tbody></table></div>
+      <div class="actions">
+        <button type="button" class="sub" id="pv-back">戻って直す</button>
+        <button type="button" class="primary" id="pv-ok">この内容で登録</button>
+      </div></div>`);
+    $("pv-back").addEventListener("click", () => { closeModal(); });
+    $("pv-ok").addEventListener("click", () => { closeModal(); save(); });
+    $("pv-ok").focus();
+  }
+
   async function save() {
     msg("");
     const date = dateEl.value;
@@ -457,12 +501,7 @@ function mountVoucherForm(root, { voucher = null, onSaved, onCancel, onDeleted }
     if (built.error) return msg(built.error);
     const lines = built.lines;
     // 事業/生活：損益の科目の初期値を、その科目の行に付ける。貸借だけの科目は、伝票内の損益の科目に合わせる
-    const isPL = (a) => a && (a.kind === "expense" || a.kind === "revenue");
-    const plFirst = lines.map((l) => state.accountsById[l.accId]).find(isPL);
-    lines.forEach((l) => {
-      const a = state.accountsById[l.accId];
-      l.biz = isPL(a) ? a.biz || "life" : plFirst ? plFirst.biz || "life" : "life";
-    });
+    applyBiz(lines);
     const pv = party.getValue();
     const fv = field.getValue().id || "";
     saveBtn.disabled = true;
@@ -665,8 +704,8 @@ function voucherRows(vo, alt) {
       <td>${chipOf(debits[i])}</td>
       <td>${chipOf(credits[i])}</td>
       <td>${first && fd ? `<span class="fd"><b>${esc(fd.no)}</b>${esc(hk(fd.name))}</span>` : ""}</td>
-      <td>${first ? esc(hk(partyLabel(vo.partyId))) : ""}</td>
-      <td>${esc(hk(((debits[i] && debits[i].memo) || (credits[i] && credits[i].memo)) || ""))}${first && vo.late ? ` <span class="chip late">後日記帳 ${esc(fmtMD(vo.entryDate))}</span>` : ""}${first && firstLine.biz === "biz" ? ' <span class="chip biz">事業</span>' : ""}</td>
+      <td>${first ? esc(hk(vo._partyName || partyLabel(vo.partyId))) : ""}</td>
+      <td>${esc(hk([...new Set([debits[i] && debits[i].memo, credits[i] && credits[i].memo].filter(Boolean))].join(" ／ ")))}${first && vo.late ? ` <span class="chip late">後日記帳 ${esc(fmtMD(vo.entryDate))}</span>` : ""}${first && firstLine.biz === "biz" ? ' <span class="chip biz">事業</span>' : ""}</td>
       <td class="amt num ${isRev ? "inc" : ""}">${first ? (isRev ? "+" : "") + yen(total) : ""}</td>
       <td class="mk">${first ? esc(vo.mark || "") : ""}</td>
     </tr>`;
