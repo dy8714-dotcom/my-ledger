@@ -1,10 +1,11 @@
 // 記帳画面（入力欄と仕訳の一覧）
-import { state, col, loadParties, loadVouchers, fetchMonthVouchers } from "./state.js?v=0.1D2";
+import { state, col, loadParties, loadVouchers, fetchMonthVouchers } from "./state.js?v=0.1D3";
 import { $, esc, norm, hk, yen, parseAmount, WD, ymd, monthOf, shiftMonth, firstDayOf, accChip, openModal, closeModal }
-  from "./util.js?v=0.1D2";
-import { createCombo } from "./combo.js?v=0.1D2";
-import { doc, setDoc, updateDoc, deleteDoc, serverTimestamp, increment, arrayUnion }
+  from "./util.js?v=0.1D3";
+import { createCombo } from "./combo.js?v=0.1D3";
+import { doc, setDoc, updateDoc, deleteDoc, serverTimestamp, increment, arrayUnion, deleteField }
   from "https://www.gstatic.com/firebasejs/13.4.0/firebase-firestore.js";
+import { patternsOf, sortPatterns, describePattern, addPattern } from "./patterns.js?v=0.1D3";
 
 // ---------- 候補の作り方 ----------
 const isBlank = (a) => a.name.startsWith("（") || a.name === "ー";
@@ -15,20 +16,46 @@ function accountItems() {
   }));
 }
 
-function fieldItems() {
+// 学習用：損益の科目（費用・収益）があれば、それだけを数える
+function statAccIds(ids) {
+  const u = [...new Set((ids || []).filter(Boolean))];
+  const pl = u.filter((id) => { const a = state.accountsById[id]; return a && (a.kind === "expense" || a.kind === "revenue"); });
+  return pl.length ? pl : u;
+}
+
+// 分野：選んだ科目でよく使った順（絞り込みはしない）
+function fieldItems(accIds) {
+  const ids = statAccIds(accIds);
+  const st = state.stats.accField;
   return state.fields.filter((f) => !f.hidden).map((f) => ({
-    id: f.id, no: f.no, name: f.name, kana: "", count: 0, boost: false,
+    id: f.id, no: f.no, name: f.name, kana: "", boost: false,
+    count: ids.reduce((sum, a) => sum + (st[a + "__" + f.id] || 0), 0),
     html: `<span class="fd"><b>${esc(f.no)}</b>${esc(hk(f.name))}</span>`
   }));
 }
 
+// 取引先：選んだ分野でよく使った順。分野が空なら、使用回数の順
 function partyItems(fieldId) {
-  return state.parties.filter((p) => !p.hidden).map((p) => ({
-    id: p.id, no: null, name: p.name, kana: p.kana || "", count: p.count || 0,
-    boost: !!(fieldId && (p.fieldIds || []).includes(fieldId)),
-    spot: !!p.spot,
-    html: `<span class="pn">${esc(hk(p.name))}${p.spot ? ' <span class="spot">スポット</span>' : ""}</span><span class="cnt">${p.count || 0}回</span>`
-  }));
+  const st = state.stats.fieldParty;
+  return state.parties.filter((p) => !p.hidden).map((p) => {
+    const pair = fieldId ? st[fieldId + "__" + p.id] || 0 : 0;
+    return {
+      id: p.id, no: null, name: p.name, kana: p.kana || "", count: pair * 1000 + (p.count || 0),
+      boost: !!(fieldId && ((p.fieldIds || []).includes(fieldId) || pair > 0)),
+      spot: !!p.spot,
+      html: `<span class="pn">${esc(hk(p.name))}${p.spot ? ' <span class="spot">スポット</span>' : ""}</span><span class="cnt">${p.count || 0}回</span>`
+    };
+  });
+}
+
+// その取引先で、いちばんよく使った分野
+function bestFieldOf(p) {
+  let best = null, n = 0;
+  Object.entries(state.stats.fieldParty).forEach(([k, v]) => {
+    const [fid, pid] = k.split("__");
+    if (pid === p.id && v > n && state.fieldsById[fid]) { best = fid; n = v; }
+  });
+  return best || (p.fieldIds || []).find((f) => state.fieldsById[f]) || (p.last && p.last.fieldId) || null;
 }
 
 const accLabel = (id) => {
@@ -79,6 +106,7 @@ function mountVoucherForm(root, { voucher = null, onSaved, onCancel, onDeleted }
       <div class="in c1"><label>印</label>
         <select data-k="mark"><option value="">ー</option><option>☆</option><option>★</option><option>◆</option><option>◇</option></select></div>
     </div>
+    <div class="patbar" data-k="patbar" hidden></div>
     <div class="lines" data-k="lines" hidden>
       <div class="lhead"><span>区分</span><span>科目</span><span class="r">金額</span><span>税率</span><span>摘要</span><span></span></div>
       <div data-k="linerows"></div>
@@ -86,6 +114,7 @@ function mountVoucherForm(root, { voucher = null, onSaved, onCancel, onDeleted }
     </div>
     <div class="vactions">
       <button type="button" class="primary" data-k="save">${isEdit ? "保存" : "登録"}</button>
+      <label class="remember" data-k="rememberwrap" hidden><input type="checkbox" data-k="remember"> <span data-k="rememberlabel"></span></label>
       <button type="button" class="sub" data-k="addline">＋ 行を追加</button>
       ${isEdit ? '<button type="button" class="sub" data-k="cancel">キャンセル</button>' : ""}
       ${isEdit ? '<button type="button" class="danger" data-k="delete">削除</button>' : ""}
@@ -96,6 +125,7 @@ function mountVoucherForm(root, { voucher = null, onSaved, onCancel, onDeleted }
   const dateEl = q("date"), seqEl = q("seq"), taxEl = q("tax"), memoEl = q("memo");
   const amountEl = q("amount"), markEl = q("mark"), msgEl = q("msg"), saveBtn = q("save");
   const simpleEls = root.querySelectorAll(".simple");
+  const patbar = q("patbar"), rememberEl = q("remember"), rememberWrap = q("rememberwrap"), rememberLabel = q("rememberlabel");
   const linesBox = q("lines"), rowsHost = q("linerows"), balanceEl = q("balance");
   let taxTouched = false;
   let detail = false;
@@ -138,25 +168,68 @@ function mountVoucherForm(root, { voucher = null, onSaved, onCancel, onDeleted }
     onChange: defaultTax, onEnter: () => focusNext(credit.input)
   });
   const field = createCombo(q("field"), {
-    getItems: fieldItems, labelOf: fieldLabel, onEnter: () => focusNext(field.input)
+    getItems: () => fieldItems(currentAccIds()), labelOf: fieldLabel, onEnter: () => focusNext(field.input)
   });
   const party = createCombo(q("party"), {
     getItems: () => partyItems(field.getValue().id), labelOf: partyLabel, allowNew: true,
     onChange(v) {
+      refreshParty(v, true);
       const p = v.id && state.partiesById[v.id];
       if (!p) return;
       // 取引先の履歴から、空いている欄だけ自動で入れる
-      const last = p.last || {};
-      const fid = (p.fieldIds && p.fieldIds[0]) || last.fieldId;
-      if (field.isEmpty() && fid && state.fieldsById[fid]) field.setValue(fid);
-      if (detail) return;
-      if (debit.isEmpty() && last.debitId && state.accountsById[last.debitId]) debit.setValue(last.debitId);
-      if (credit.isEmpty() && last.creditId && state.accountsById[last.creditId]) credit.setValue(last.creditId);
-      if (!taxTouched && last.tax != null) taxEl.value = String(last.tax);
-      else defaultTax();
+      const fid = bestFieldOf(p);
+      if (field.isEmpty() && fid) field.setValue(fid);
+      const best = sortPatterns(patternsOf(p))[0];
+      if (best) applyPattern(best, false);
     },
-    onEnter: () => focusNext(party.input)
+    onEnter: () => { if (detail && rows.length) lineFocus(rows[0], "amount"); else focusNext(party.input); }
   });
+
+  function currentAccIds() {
+    return detail ? rows.map((r) => r.acc.getValue().id) : [debit.getValue().id, credit.getValue().id];
+  }
+
+  // 取引先まわりの表示：パターンの候補ボタンと、「覚える」のチェック
+  function refreshParty(v, resetCheck) {
+    const val = v || party.getValue();
+    const p = val.id && state.partiesById[val.id];
+    const name = p ? hk(p.name) : val.newName || "";
+    rememberWrap.hidden = !name;
+    rememberLabel.textContent = name ? `この形を、取引先「${name}」の入力パターンとして覚える` : "";
+    if (resetCheck) rememberEl.checked = !isEdit;
+    const list = p ? sortPatterns(patternsOf(p)) : [];
+    patbar.hidden = list.length === 0;
+    patbar.innerHTML = list.length
+      ? `<span class="note">この取引先のパターン（押すと入れ替わります）：</span>` +
+        list.map((pt, i) => `<button type="button" class="pat" data-i="${i}">${esc(describePattern(pt))}<span class="n">${pt.uses || 0}回</span></button>`).join("")
+      : "";
+    patbar._list = list;
+  }
+  patbar.addEventListener("click", (e) => {
+    const b = e.target.closest(".pat");
+    if (!b || !patbar._list) return;
+    applyPattern(patbar._list[parseInt(b.dataset.i, 10)], true);
+    if (detail && rows.length) lineFocus(rows[0], "amount"); else amountEl.focus();
+  });
+
+  // パターンを入力欄に入れる。force=false のときは、まだ何も入れていない場合だけ
+  function applyPattern(pat, force) {
+    if (!pat || !pat.lines || pat.lines.length < 2) return;
+    const empty = debit.isEmpty() && credit.isEmpty() && !detail;
+    if (!force && !empty) return;
+    if (force) { if (detail) leaveDetail(); debit.clear(); credit.clear(); taxTouched = false; }
+    const ds = pat.lines.filter((l) => l.side === "debit");
+    const cs = pat.lines.filter((l) => l.side === "credit");
+    const known = pat.lines.every((l) => state.accountsById[l.accId]);
+    if (!known) return;
+    if (ds.length === 1 && cs.length === 1) {
+      debit.setValue(ds[0].accId);
+      credit.setValue(cs[0].accId);
+      if (!taxTouched) taxEl.value = String(ds[0].tax || 0);
+    } else {
+      enterDetail(pat.lines);
+    }
+  }
 
   // ----- 複合仕訳：行ごとの入力 -----
   const sumOf = (side) => rows.reduce((s, r) => {
@@ -231,7 +304,7 @@ function mountVoucherForm(root, { voucher = null, onSaved, onCancel, onDeleted }
     if (fromLines) {
       const ds = fromLines.filter((l) => l.side === "debit");
       const cs = fromLines.filter((l) => l.side === "credit");
-      [...ds, ...cs].forEach((l) => addRow({ side: l.side, accId: l.accId, amount: String(l.amount), tax: l.tax, memo: l.memo, taxSet: true }));
+      [...ds, ...cs].forEach((l) => addRow({ side: l.side, accId: l.accId, amount: l.amount ? String(l.amount) : "", tax: l.tax, memo: l.memo, taxSet: true }));
     } else {
       const amt = amountEl.value;
       addRow({ side: "debit", accId: debit.getValue().id, amount: amt, tax: taxEl.value, memo: memoEl.value.trim(), taxSet: true });
@@ -308,6 +381,7 @@ function mountVoucherForm(root, { voucher = null, onSaved, onCancel, onDeleted }
       taxEl.value = "0";
     }
     updateSeq();
+    refreshParty(party.getValue(), true);
   }
 
   function resetForNext() {
@@ -317,6 +391,7 @@ function mountVoucherForm(root, { voucher = null, onSaved, onCancel, onDeleted }
     taxEl.value = "0"; taxTouched = false;
     dateEl.value = defaultDate();
     updateSeq();
+    refreshParty(party.getValue(), true);
     party.focus();
   }
 
@@ -400,20 +475,27 @@ function mountVoucherForm(root, { voucher = null, onSaved, onCancel, onDeleted }
       if (isEdit) id = voucher.id;
       else { id = "v_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 5); data.createdAt = serverTimestamp(); }
       await setDoc(doc(col("vouchers"), id), data, { merge: true });
+      const remember = !!(partyId && !rememberWrap.hidden && rememberEl.checked);
       if (partyId) {
         const upd = { lastUsed: date };
-        const simple = lines.length === 2;
-        if (simple) {
-          upd.last = {
-            debitId: lines.find((l) => l.side === "debit").accId,
-            creditId: lines.find((l) => l.side === "credit").accId,
-            tax: lines[0].tax, fieldId: fv
-          };
-        }
         if (!isEdit) upd.count = increment(1);
         if (fv) upd.fieldIds = arrayUnion(fv);
+        if (remember) {
+          const cur = state.partiesById[partyId];
+          upd.patterns = addPattern(cur ? patternsOf(cur) : [], lines, date);
+          upd.last = deleteField();
+        }
         await updateDoc(doc(col("parties"), partyId), upd);
         await loadParties();
+      }
+      if (!isEdit && fv) {
+        // 学習：この科目でこの分野、この分野でこの取引先、を1回ずつ数える
+        const accField = {}, fieldParty = {};
+        statAccIds(lines.map((l) => l.accId)).forEach((a) => { accField[a + "__" + fv] = increment(1); });
+        if (partyId) fieldParty[fv + "__" + partyId] = increment(1);
+        await setDoc(doc(col("meta"), "stats"), { accField, fieldParty }, { merge: true });
+        Object.keys(accField).forEach((k) => { state.stats.accField[k] = (state.stats.accField[k] || 0) + 1; });
+        Object.keys(fieldParty).forEach((k) => { state.stats.fieldParty[k] = (state.stats.fieldParty[k] || 0) + 1; });
       }
       state.lastDate = date;
       if (monthOf(date) !== state.month && !isEdit) state.month = monthOf(date); // 別の月度に記帳したら、その月度を表示する

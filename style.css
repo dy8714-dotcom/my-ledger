@@ -147,3 +147,13 @@ button.danger:hover { background: #fdecea; }
 .spot { display: inline-block; font-size: 10.5px; padding: 0 6px; border-radius: 8px; border: 1px solid #c9b88a; color: #6b5300; background: #faf3d9; margin-left: 4px; }
 .chkbox { max-height: 190px; overflow-y: auto; border: 1px solid #cfc9bc; border-radius: 6px; padding: 6px 10px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 2px 12px; }
 .dialog .chk { display: flex; align-items: center; gap: 6px; font-weight: normal; margin: 0; font-size: 13px; color: #222; }
+
+/* D-3：入力パターン */
+.patbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 10px; }
+.patbar .pat { border: 1px solid #b9c7e6; background: #f1f5fd; color: #1f3a78; border-radius: 14px; padding: 4px 12px; font-size: 13px; cursor: pointer; }
+.patbar .pat:hover { background: #e2eafb; }
+.patbar .pat .n { margin-left: 8px; color: #6b7a99; font-size: 12px; }
+.vactions .remember { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: #333; }
+.patlist { margin-top: 6px; }
+.patrow { display: flex; align-items: center; gap: 10px; padding: 6px 0; border-bottom: 1px solid #eee; font-size: 13px; }
+.patrow > span:first-child { flex: 1; }

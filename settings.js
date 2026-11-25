@@ -1,11 +1,12 @@
 // 設定画面（科目・分野の台帳）
-import { state, col, loadAll, loadParties } from "./state.js?v=0.1D2";
-import { $, esc, norm, hk, showError } from "./util.js?v=0.1D2";
-import { doc, setDoc, writeBatch, serverTimestamp }
+import { state, col, loadAll, loadParties } from "./state.js?v=0.1D3";
+import { $, esc, norm, hk, showError } from "./util.js?v=0.1D3";
+import { doc, setDoc, writeBatch, serverTimestamp, deleteField }
   from "https://www.gstatic.com/firebasejs/13.4.0/firebase-firestore.js";
 import { SEED_ACCOUNTS, SEED_FIELDS, CATEGORIES, CATEGORY_COLORS, KIND_LABELS, sideOf }
-  from "./seed.js?v=0.1D2";
-import { db } from "./state.js?v=0.1D2";
+  from "./seed.js?v=0.1D3";
+import { db } from "./state.js?v=0.1D3";
+import { patternsOf, sortPatterns, describePattern } from "./patterns.js?v=0.1D3";
 
 // ---------- 設定画面 ----------
 export function renderSettings() {
@@ -432,6 +433,7 @@ function openPartyDialog(p) {
       <input type="text" id="p-kana" value="${esc(d.kana)}">
       <label>所属する分野（複数選べます。記帳で分野を選ぶと、その分野の取引先が上に出ます）</label>
       <div class="chkbox">${checks}</div>
+      ${isNew ? "" : `<label>覚えている入力パターン（「削除」を押して、保存すると消えます）</label><div id="p-pats" class="patlist"></div>`}
       <label class="check"><input type="checkbox" id="p-spot" ${d.spot ? "checked" : ""}> スポット取引先（一度きりの店用。候補の一番下に出ます）</label>
       <label class="check"><input type="checkbox" id="p-hidden" ${d.hidden ? "checked" : ""}> 非表示にする（候補に出さない。削除はしません）</label>
       <div id="dlg-error" class="dlg-error" hidden></div>
@@ -441,6 +443,25 @@ function openPartyDialog(p) {
       </div>
     </div>`;
   $("dlg-cancel").addEventListener("click", closeDialog);
+  // 入力パターン：削除は、保存を押すまで確定しない
+  let pats = p ? sortPatterns(patternsOf(p)) : [];
+  let patsChanged = false;
+  const drawPats = () => {
+    const host = $("p-pats");
+    if (!host) return;
+    host.innerHTML = pats.length
+      ? pats.map((pt, i) => `<div class="patrow"><span>${esc(describePattern(pt))}</span><span class="note">${esc(pt.uses || 0)}回</span>
+          <button type="button" class="sub small" data-del="${i}">削除</button></div>`).join("")
+      : `<p class="note">まだ覚えているパターンはありません。</p>`;
+  };
+  drawPats();
+  if ($("p-pats")) $("p-pats").addEventListener("click", (e) => {
+    const b = e.target.closest("[data-del]");
+    if (!b) return;
+    pats.splice(parseInt(b.dataset.del, 10), 1);
+    patsChanged = true;
+    drawPats();
+  });
   $("dlg-save").addEventListener("click", async () => {
     const fail = (m) => { $("dlg-error").textContent = m; $("dlg-error").hidden = false; };
     const name = $("p-name").value.trim();
@@ -453,6 +474,10 @@ function openPartyDialog(p) {
       name, kana: $("p-kana").value.trim(), fieldIds,
       spot: $("p-spot").checked, hidden: $("p-hidden").checked, updatedAt: serverTimestamp()
     };
+    if (p && patsChanged) {
+      data.patterns = pats.map((x) => ({ sig: x.sig, lines: x.lines, uses: x.uses || 0, last: x.last || "" }));
+      data.last = deleteField();
+    }
     const id = p ? p.id : "pty_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 5);
     if (!p) { data.createdAt = serverTimestamp(); data.count = 0; }
     $("dlg-save").disabled = true;

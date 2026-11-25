@@ -1,7 +1,7 @@
 // 共有の状態と、Firestoreの読み込み
 import { initializeApp } from "https://www.gstatic.com/firebasejs/13.4.0/firebase-app.js";
 import { getAuth } from "https://www.gstatic.com/firebasejs/13.4.0/firebase-auth.js";
-import { getFirestore, collection, getDocs, query, where }
+import { getFirestore, collection, getDocs, getDoc, doc, query, where }
   from "https://www.gstatic.com/firebasejs/13.4.0/firebase-firestore.js";
 
 const firebaseConfig = {
@@ -37,7 +37,8 @@ export const state = {
   month: currentMonth(),
   lastDate: null,
   q: "",
-  showHidden: false
+  showHidden: false,
+  stats: { accField: {}, fieldParty: {} }
 };
 
 export function col(name) {
@@ -59,6 +60,17 @@ export async function loadParties() {
   state.partiesById = byId(state.parties);
 }
 
+// 学習の回数（科目×分野、分野×取引先）
+export async function loadStats() {
+  try {
+    const snap = await getDoc(doc(col("meta"), "stats"));
+    const d = snap.exists() ? snap.data() : {};
+    state.stats = { accField: d.accField || {}, fieldParty: d.fieldParty || {} };
+  } catch (err) {
+    state.stats = { accField: {}, fieldParty: {} };
+  }
+}
+
 export async function loadAll() {
   const [a, f] = await Promise.all([getDocs(col("accounts")), getDocs(col("fields"))]);
   state.accounts = toList(a).sort((x, y) => x.no - y.no);
@@ -66,6 +78,7 @@ export async function loadAll() {
   state.fields = toList(f).sort((x, y) => x.no - y.no);
   state.fieldsById = byId(state.fields);
   await loadParties();
+  await loadStats();
 }
 
 function sortVouchers(list) {
