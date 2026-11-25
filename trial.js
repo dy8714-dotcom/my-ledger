@@ -1,7 +1,7 @@
 // 試算表（科目ごとの 月初残高・借方・貸方・残高）
-import { state, loadAllVouchers } from "./state.js?v=0.1E";
-import { $, esc, yen, accChip, shiftMonth, showError } from "./util.js?v=0.1E";
-import { CATEGORIES } from "./seed.js?v=0.1E";
+import { state, loadAllVouchers } from "./state.js?v=0.1F";
+import { $, esc, yen, accChip, shiftMonth, showError } from "./util.js?v=0.1F";
+import { CATEGORIES } from "./seed.js?v=0.1F";
 
 // "26.11" → 通し番号（月ごとに +1）
 const idxOf = (m) => { const [y, mm] = m.split(".").map((x) => parseInt(x, 10)); return y * 12 + (mm - 1); };
@@ -59,6 +59,7 @@ export function computeTrial(vouchers, accountsById, S, E) {
 }
 
 const num = (n) => (n === 0 ? `<span class="muted">0</span>` : yen(n));
+const link = (accId, side, html) => `<a href="#" class="lk" data-acc="${esc(accId)}" data-side="${side}">${html}</a>`;
 const diffHtml = (n) => (n === 0 ? `<span class="muted">0</span>` : `<span class="${n > 0 ? "inc" : "out"}">${n > 0 ? "+" : "-"}${yen(Math.abs(n))}</span>`);
 
 export async function renderTrial() {
@@ -86,8 +87,8 @@ function draw(list) {
   let body = "";
   let alt = 0;
   const rowHtml = (r) => `<tr class="${alt++ % 2 ? "alt" : ""}">
-      <td>${accChip(r.a)}</td><td class="r num">${num(r.open)}</td><td class="r num">${num(r.dr)}</td><td class="r num">${num(r.cr)}</td>
-      <td class="r num" style="font-weight:700">${num(r.bal)}</td><td class="r num">${diffHtml(r.diff)}</td></tr>`;
+      <td>${link(r.a.id, "both", accChip(r.a))}</td><td class="r num">${num(r.open)}</td><td class="r num">${link(r.a.id, "debit", num(r.dr))}</td><td class="r num">${link(r.a.id, "credit", num(r.cr))}</td>
+      <td class="r num" style="font-weight:700">${link(r.a.id, "both", num(r.bal))}</td><td class="r num">${diffHtml(r.diff)}</td></tr>`;
   const sum = (rs) => rs.reduce((s, r) => ({ open: s.open + r.open, dr: s.dr + r.dr, cr: s.cr + r.cr, bal: s.bal + r.bal, diff: s.diff + r.diff }),
     { open: 0, dr: 0, cr: 0, bal: 0, diff: 0 });
   const subHtml = (name, rs) => { const x = sum(rs); return `<tr class="sub"><td>${esc(name)} 計</td><td class="r num">${yen(x.open)}</td><td class="r num">${yen(x.dr)}</td><td class="r num">${yen(x.cr)}</td><td class="r num">${yen(x.bal)}</td><td class="r num">${x.diff > 0 ? "+" : ""}${yen(x.diff)}</td></tr>`; };
@@ -152,6 +153,15 @@ function draw(list) {
     </div>`;
 
   const redraw = () => draw(list);
+  document.querySelector(".tbl.tb tbody").addEventListener("click", (e) => {
+    const a = e.target.closest("a.lk");
+    if (!a) return;
+    e.preventDefault();
+    state.lg = state.lg || { cond: null, mode: "none" };
+    state.lg.preset = { accountId: a.dataset.acc, side: a.dataset.side, fromM: keyOf(S), toM: keyOf(E) };
+    state.tab = "ledger";
+    document.querySelector('#nav [data-tab="ledger"]').click();
+  });
   $("tb-prev").addEventListener("click", () => { t.month = shiftMonth(t.month, t.mode === "quarter" ? -3 : t.mode === "year" ? -12 : -1); redraw(); });
   $("tb-next").addEventListener("click", () => { t.month = shiftMonth(t.month, t.mode === "quarter" ? 3 : t.mode === "year" ? 12 : 1); redraw(); });
   $("tb-seg").addEventListener("click", (e) => {

@@ -1,11 +1,11 @@
 // 記帳画面（入力欄と仕訳の一覧）
-import { state, col, loadParties, loadVouchers, fetchMonthVouchers } from "./state.js?v=0.1E";
+import { state, col, loadParties, loadVouchers, fetchMonthVouchers } from "./state.js?v=0.1F";
 import { $, esc, norm, hk, yen, parseAmount, WD, ymd, monthOf, shiftMonth, firstDayOf, accChip, openModal, closeModal }
-  from "./util.js?v=0.1E";
-import { createCombo } from "./combo.js?v=0.1E";
+  from "./util.js?v=0.1F";
+import { createCombo } from "./combo.js?v=0.1F";
 import { doc, setDoc, updateDoc, deleteDoc, serverTimestamp, increment, arrayUnion, deleteField }
   from "https://www.gstatic.com/firebasejs/13.4.0/firebase-firestore.js";
-import { patternsOf, sortPatterns, describePattern, addPattern, fromTemplate } from "./patterns.js?v=0.1E";
+import { patternsOf, sortPatterns, describePattern, addPattern, fromTemplate } from "./patterns.js?v=0.1F";
 
 // ---------- 候補の作り方 ----------
 const isBlank = (a) => a.name.startsWith("（") || a.name === "ー";
@@ -655,15 +655,16 @@ async function changeMonth(delta) {
   renderEntry();
 }
 
-function openEdit(vo) {
+export function openEdit(vo, after) {
+  const done = after || renderEntry;
   $("error").hidden = true;
   openModal(`<div class="dialog wide" role="dialog" aria-modal="true">
     <h2>仕訳を修正（${esc(vo.month)}-${esc(vo.seq)}）</h2><div id="edit-form"></div></div>`);
   mountVoucherForm($("edit-form"), {
     voucher: vo,
-    onSaved: () => { closeModal(); renderEntry(); },
+    onSaved: () => { closeModal(); done(); },
     onCancel: closeModal,
-    onDeleted: () => { closeModal(); renderEntry(); }
+    onDeleted: () => { closeModal(); done(); }
   });
 }
 

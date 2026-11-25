@@ -40,6 +40,8 @@ export const state = {
   showHidden: false,
   stats: { accField: {}, fieldParty: {} },
   allVouchers: null,
+  lg: null,
+  savedSearches: null,
   tb: { month: null, mode: "month", from: null, to: null, hideZero: true, byNo: false }
 };
 

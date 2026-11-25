@@ -183,3 +183,26 @@ button.danger:hover { background: #fdecea; }
 .inc { color: #1b6431; } .out { color: #8a3f06; } .muted { color: #5f6672; }
 @media (max-width: 900px) { .tbgrid { grid-template-columns: 1fr; } }
 @media print { header, nav, .monthbar button, .seg, #tb-hide, #tb-byno { display: none !important; } }
+
+/* F：元帳・検索 */
+.lgbox { overflow: visible; }
+.lgrow { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 10px; }
+.lgrow .spacer { flex: 1; }
+.lggrid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px 16px; margin-bottom: 10px; }
+.lggrid .in { display: flex; flex-direction: column; gap: 4px; }
+.lggrid .in > label { font-size: 11.5px; color: #4b5260; font-weight: 500; }
+.multi .chips { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 4px; }
+.chip2 { display: inline-flex; align-items: center; gap: 4px; background: #eef3fd; border: 1px solid #8fb0e8; color: #1a4fb5; border-radius: 12px; padding: 1px 4px 1px 9px; font-size: 12.5px; }
+.chip2 button { border: none; background: none; cursor: pointer; color: #1a4fb5; font-size: 14px; padding: 0 4px; }
+.amtrange { display: flex; align-items: center; gap: 6px; }
+.amtrange input { width: 110px; padding: 6px 8px; border: 1px solid #aaa; border-radius: 6px; text-align: right; }
+.checks { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 13px; }
+.checks label { display: inline-flex; align-items: center; gap: 4px; }
+.tbl.lg { min-width: 900px; }
+.tbl.lg th.r, .tbl.lg td.r { text-align: right; }
+.tbl.lg tr.open td { background: #f5f2ea; font-size: 12.5px; }
+.tbl.lg tr.tot td { background: #2b3a55; color: #fff; font-weight: bold; border-right: none; }
+.tbl.lg .wd { margin-left: 4px; font-size: 11px; color: #5f6672; } .tbl.lg .wd.sat { color: #1a4fb5; } .tbl.lg .wd.sun { color: #b3261e; }
+.tbl.lg.sub { min-width: 0; width: auto; margin: 12px 16px; }
+a.lk { color: inherit; text-decoration: none; } a.lk:hover { text-decoration: underline; color: #1a4fb5; }
+@media (max-width: 900px) { .lggrid { grid-template-columns: 1fr; } }
