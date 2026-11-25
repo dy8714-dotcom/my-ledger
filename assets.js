@@ -1,7 +1,7 @@
 // 月割り償却（手順I2a）：資産の登録と予定表
-import { state, col, loadAssets } from "./state.js?v=0.2I2a";
-import { $, esc, yen, ymd, openModal, closeModal, showError } from "./util.js?v=0.2I2a";
-import { doc, addDoc, updateDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/13.4.0/firebase-firestore.js";
+import { state, col, db, loadAssets, loadVouchers, fetchMonthVouchers } from "./state.js?v=0.2I2b";
+import { $, esc, yen, ymd, openModal, closeModal, showError } from "./util.js?v=0.2I2b";
+import { doc, addDoc, updateDoc, writeBatch, arrayUnion, serverTimestamp } from "https://www.gstatic.com/firebasejs/13.4.0/firebase-firestore.js";
 
 // ---------- 計算（画面に依存しない部分） ----------
 export const monthIdx = (m) => { const [y, mm] = m.split(".").map((x) => parseInt(x, 10)); return (2000 + y) * 12 + mm - 1; };
@@ -63,6 +63,11 @@ export function annotate(rows, a) {
   return rows.map((r) => ({ ...r, st: monthIdx(r.month) <= booked ? "hand" : posted.has(r.month) ? "done" : "todo" }));
 }
 
+// 月割りの対象にできる資産科目：区分が「固定資産」（土地31は減らないので除く）と、23 前払費用（年払いの受け皿）
+export function deprAccounts() {
+  return state.accounts.filter((x) => !x.hidden && x.no !== 31 && (x.category === "固定資産" || x.no === 23)).sort((p, q) => p.no - q.no);
+}
+
 const STATUS = { active: "償却中", ended: "終了", disposed: "処分" };
 const METHOD = { count: "回数で割る", firstDiff: "初月だけ金額を変える", daily: "1日あたり×日数" };
 
@@ -103,7 +108,7 @@ export async function renderAssets() {
 function openForm(a) {
   const isEdit = !!a;
   const locked = isEdit && (a.posted || []).length > 0; // 仕訳に計上したあとの金額・回数の変更は、次の版（今月だけ／来月以降も）で扱う
-  const assetAccs = state.accounts.filter((x) => [33, 35].includes(x.no)); // 月割り償却の対象は33と35
+  const assetAccs = deprAccounts(); // 固定資産の科目（土地を除く）と23 前払費用
   const expAccs = state.accounts.filter((x) => x.kind === "expense");
   const byNo = (n) => (state.accounts.find((x) => x.no === n) || {}).id || "";
   const v = a || { name: "", memo: "", acquiredDate: ymd(new Date()), amount: "", assetAccId: byNo(33), expenseAccId: byNo(74),
@@ -188,4 +193,106 @@ function openForm(a) {
       $("as-msg").textContent = "保存に失敗しました：" + (err.code || err.message);
     }
   });
+}
+
+
+// ---------- 月末の下書き（I2b） ----------
+const lastDayOf = (m) => { const [y, mm] = m.split(".").map((x) => parseInt(x, 10)); return `${2000 + y}-${String(mm).padStart(2, "0")}-${String(daysIn(m)).padStart(2, "0")}`; };
+
+// その月の最終日以降で、まだ計上していない償却（償却中の資産だけ）。古い月から順に並べる
+export function pendingDrafts(today = ymd(new Date())) {
+  const out = [];
+  for (const a of state.assets || []) {
+    if (a.status !== "active") continue;
+    const sc = computeSchedule(a);
+    if (sc.error) continue;
+    const an = annotate(sc.rows, a);
+    an.forEach((r) => {
+      if (r.st === "todo" && today >= lastDayOf(r.month)) out.push({ asset: a, month: r.month, n: r.n, total: an.length, amount: r.amount, date: lastDayOf(r.month) });
+    });
+  }
+  return out.sort((p, q) => monthIdx(p.month) - monthIdx(q.month) || (p.asset.name < q.asset.name ? -1 : 1));
+}
+
+// 記帳画面の上のお知らせ
+export function renderDeprBanner(el, onDone) {
+  if (!el) return;
+  const d = pendingDrafts();
+  if (!d.length) { el.hidden = true; el.innerHTML = ""; return; }
+  const total = d.reduce((s, x) => s + x.amount, 0);
+  el.hidden = false;
+  el.innerHTML = `<span>月割り償却の<strong>未計上が${d.length}件</strong>（計 ¥${yen(total)}）あります。</span><button type="button" class="primary" id="dp-open">確認する</button>`;
+  $("dp-open").addEventListener("click", () => openDraftDialog(onDone));
+}
+
+function openDraftDialog(onDone) {
+  const d = pendingDrafts();
+  if (!d.length) return;
+  const accName = (id) => (state.accountsById[id] || {}).name || "?";
+  openModal(`<div class="dialog wide" role="dialog" aria-modal="true">
+    <h2>月割り償却の下書き（確認して登録）</h2>
+    <p class="note">チェックを入れた分を、その月の最終日付の仕訳として登録します。登録後は、ふつうの仕訳と同じように記帳画面から直せます。</p>
+    <div class="tablewrap" style="max-height:320px;overflow:auto"><table class="tbl" style="min-width:0"><thead><tr><th></th><th>月度</th><th>日付</th><th>品名</th><th>回</th><th>借方</th><th>貸方</th><th class="amt">金額</th></tr></thead><tbody>
+    ${d.map((x, i) => `<tr><td><input type="checkbox" data-i="${i}" checked></td><td>${esc(x.month)}</td><td>${esc(x.date)}</td><td>${esc(x.asset.name)}</td><td>${x.n}／${x.total}</td><td>${esc(accName(x.asset.expenseAccId))}</td><td>${esc(accName(x.asset.assetAccId))}</td><td class="amt">${yen(x.amount)}</td></tr>`).join("")}
+    </tbody></table></div>
+    <p id="dp-msg" class="note"></p>
+    <div class="actions"><button type="button" class="sub" id="dp-cancel">あとで</button><button type="button" class="primary" id="dp-ok">選んだ分を登録</button></div></div>`);
+  $("dp-cancel").addEventListener("click", closeModal);
+  $("dp-ok").addEventListener("click", async () => {
+    const picks = [...document.querySelectorAll("#modal input[data-i]")].filter((c) => c.checked).map((c) => d[Number(c.dataset.i)]);
+    if (!picks.length) return ($("dp-msg").textContent = "登録する行を選んでください。");
+    $("dp-ok").disabled = true; $("dp-cancel").disabled = true;
+    try {
+      await postDrafts(picks, (k) => { $("dp-msg").textContent = `登録しています… ${k}／${picks.length}`; });
+      closeModal();
+      if (onDone) await onDone();
+    } catch (err) {
+      console.error("[月割り償却] 登録失敗", err);
+      $("dp-msg").textContent = "失敗しました：" + (err.code || err.message) + "（途中まで登録されている可能性があります。画面を開き直して確認してください）";
+      $("dp-cancel").disabled = false; $("dp-cancel").textContent = "閉じる";
+    }
+  });
+}
+
+// 下書きを仕訳にする。仕訳のidは「資産×月」で決まる固定の値にして、同じ月を二重に作らない
+export async function postDrafts(picks, onStep) {
+  const nextSeq = {};
+  let k = 0;
+  for (const p of picks) {
+    if (!(p.month in nextSeq)) {
+      const list = await fetchMonthVouchers(p.month);
+      nextSeq[p.month] = Math.max(list.maxSeqAll || 0, ...list.map((v) => v.seq || 0)) + 1;
+    }
+    const a = p.asset;
+    const id = `depr_${a.id}_${p.month.replace(".", "_")}`;
+    const today = ymd(new Date());
+    const biz = (state.accountsById[a.expenseAccId] || {}).biz || "life";
+    const memo = `${a.name} 月割り償却 ${p.n}/${p.total}`;
+    const voucher = {
+      month: p.month, seq: nextSeq[p.month]++, date: p.date, entryDate: today, late: today > p.date,
+      fieldId: "", partyId: "", mark: "", auto: "depreciation", assetId: a.id,
+      lines: [
+        { side: "debit", accId: a.expenseAccId, amount: p.amount, tax: 0, memo, tags: [], biz },
+        { side: "credit", accId: a.assetAccId, amount: p.amount, tax: 0, memo, tags: [], biz }
+      ],
+      createdAt: serverTimestamp(), updatedAt: serverTimestamp()
+    };
+    const batch = writeBatch(db);
+    batch.set(doc(col("vouchers"), id), voucher);
+    const upd = { posted: arrayUnion({ month: p.month, voucherId: id }), updatedAt: serverTimestamp() };
+    batch.update(doc(col("assets"), a.id), upd);
+    await batch.commit();
+    a.posted = [...(a.posted || []), { month: p.month, voucherId: id }]; // 画面側の控えも更新
+    k++; if (onStep) onStep(k);
+  }
+  // すべて計上し終わった資産は「終了」にする
+  for (const a of new Set(picks.map((p) => p.asset))) {
+    const sc = computeSchedule(a);
+    if (!annotate(sc.rows, a).some((r) => r.st === "todo") && a.status === "active") {
+      await updateDoc(doc(col("assets"), a.id), { status: "ended", updatedAt: serverTimestamp() });
+      a.status = "ended";
+    }
+  }
+  state.allVouchers = null;
+  await loadVouchers();
 }

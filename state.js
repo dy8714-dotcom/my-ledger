@@ -106,6 +106,7 @@ export async function loadAll() {
   await loadParties();
   await loadStats();
   await loadBackupInfo();
+  try { await loadAssets(); } catch (err) { console.error("[月割り償却] 読み込み失敗", err); state.assets = []; }
 }
 
 const DAY = 24 * 60 * 60 * 1000;

@@ -1,12 +1,13 @@
 // 記帳画面（入力欄と仕訳の一覧）
-import { state, col, db, loadParties, loadVouchers, fetchMonthVouchers } from "./state.js?v=0.2I2a";
-import { downloadFullBackup } from "./backup.js?v=0.2I2a";
+import { state, col, db, loadParties, loadVouchers, fetchMonthVouchers } from "./state.js?v=0.2I2b";
+import { downloadFullBackup } from "./backup.js?v=0.2I2b";
+import { renderDeprBanner } from "./assets.js?v=0.2I2b";
 import { $, esc, norm, hk, yen, parseAmount, WD, ymd, monthOf, shiftMonth, firstDayOf, accChip, openModal, closeModal }
-  from "./util.js?v=0.2I2a";
-import { createCombo } from "./combo.js?v=0.2I2a";
+  from "./util.js?v=0.2I2b";
+import { createCombo } from "./combo.js?v=0.2I2b";
 import { doc, setDoc, updateDoc, deleteDoc, writeBatch, serverTimestamp, increment, arrayUnion, deleteField }
   from "https://www.gstatic.com/firebasejs/13.4.0/firebase-firestore.js";
-import { patternsOf, sortPatterns, describePattern, addPattern, fromTemplate } from "./patterns.js?v=0.2I2a";
+import { patternsOf, sortPatterns, describePattern, addPattern, fromTemplate } from "./patterns.js?v=0.2I2b";
 
 // ---------- 候補の作り方 ----------
 const isBlank = (a) => a.name.startsWith("（") || a.name === "ー";
@@ -607,6 +608,7 @@ export function renderEntry() {
     return;
   }
   v.innerHTML = `
+    <div id="depr-banner" class="bkbanner" hidden></div>
     <div class="monthbar">
       <button type="button" class="navbtn" id="m-prev" aria-label="前の月度">◀</button>
       <h2 id="m-title"></h2>
@@ -657,6 +659,7 @@ export function renderEntry() {
   });
   mountVoucherForm($("entry-form"), { onSaved: drawList });
   drawList();
+  renderDeprBanner($("depr-banner"), async () => { renderEntry(); });
 }
 
 async function changeMonth(delta) {
