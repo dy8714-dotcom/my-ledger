@@ -1,8 +1,8 @@
 // 元帳・検索（条件で絞り込み、科目を1つ選ぶと残高を積み上げて表示）
-import { state, col, loadAllVouchers } from "./state.js?v=0.1F2";
-import { $, esc, norm, hk, yen, parseAmount, WD, accChip, showError } from "./util.js?v=0.1F2";
-import { createCombo } from "./combo.js?v=0.1F2";
-import { openEdit } from "./entry.js?v=0.1F2";
+import { state, col, loadAllVouchers } from "./state.js?v=0.1F3";
+import { $, esc, norm, hk, yen, parseAmount, WD, accChip, showError } from "./util.js?v=0.1F3";
+import { createCombo } from "./combo.js?v=0.1F3";
+import { openEdit } from "./entry.js?v=0.1F3";
 import { doc, getDoc, setDoc } from "https://www.gstatic.com/firebasejs/13.4.0/firebase-firestore.js";
 
 const isBlank = (a) => a.name.startsWith("（") || a.name === "ー";
@@ -180,7 +180,7 @@ function drawScreen(all) {
       <p id="lg-msg" class="note"></p>
     </div>
     <div class="panel nopad"><div class="panel-head"><h3><span class="bar"></span><span id="lg-title">結果</span></h3></div>
-      <div class="tablewrap lgwrap"><table class="tbl lg"><thead id="lg-head"></thead><tbody id="lg-body"></tbody><tfoot id="lg-foot"></tfoot></table></div>
+      <div class="lgscroll"><div class="lgtable" id="lg-grid"><div id="lg-head"></div><div id="lg-body"></div><div id="lg-foot"></div></div></div>
       <div id="lg-subtotal"></div></div>`;
 
   // --- 科目・分野・取引先のチップ入力 ---
@@ -309,33 +309,33 @@ function drawScreen(all) {
     const { rows, ledgerMode, single } = res;
     const LIMIT = 1000;
     const shown = rows.slice(0, LIMIT);
-    const common = (v) => `<td class="num muted">${esc(v.month + "-" + v.seq)}</td>`;
-    const rest = (v, l) => `<td>${v.fieldId && state.fieldsById[v.fieldId] ? `<span class="fd"><b>${esc(state.fieldsById[v.fieldId].no)}</b>${esc(hk(state.fieldsById[v.fieldId].name))}</span>` : ""}</td>
-      <td>${esc(hk((state.partiesById[v.partyId] || {}).name || ""))}</td><td>${esc(memoOf(v, l))}${v.late ? ' <span class="chip late">後日記帳</span>' : ""}</td>`;
-    let head, body;
-    if (ledgerMode) {
-      head = `<tr><th>日付</th><th>伝番</th><th>相手科目</th><th>分野</th><th>取引先</th><th>摘要</th><th class="r">借方</th><th class="r">貸方</th>${single ? '<th class="r">残高</th>' : ""}</tr>`;
-      body = (single ? `<tr class="open"><td colspan="8" style="text-align:right">月初（期間の初め）残高</td><td class="r num">${yen(res.opening)}</td></tr>` : "") +
-        shown.map((x, k) => `<tr data-vid="${esc(x.v.id)}" class="${k % 2 ? "alt" : ""}"><td>${dateCell(x.v)}</td>${common(x.v)}<td>${counterpart(x.v, x.l)}</td>${rest(x.v, x.l)}
-          <td class="r num">${x.l.side === "debit" ? yen(x.l.amount) : ""}</td><td class="r num">${x.l.side === "credit" ? yen(x.l.amount) : ""}</td>${single ? `<td class="r num" style="font-weight:700">${yen(x.bal)}</td>` : ""}</tr>`).join("");
-    } else {
-      head = `<tr><th>日付</th><th>伝番</th><th>借方</th><th>貸方</th><th>分野</th><th>取引先</th><th>摘要</th><th class="r">金額</th></tr>`;
-      body = shown.map((x, k) => `<tr data-vid="${esc(x.v.id)}" class="${k % 2 ? "alt" : ""}"><td>${dateCell(x.v)}</td>${common(x.v)}<td>${accsOf(x.v, "debit")}</td><td>${accsOf(x.v, "credit")}</td>${rest(x.v, null)}<td class="r num">${yen(x.total)}</td></tr>`).join("");
-    }
-    if (!shown.length) body += `<tr><td colspan="9" class="empty">条件に合う仕訳はありません。</td></tr>`;
-    $("lg-head").innerHTML = head; $("lg-body").innerHTML = body;
-
+    const c = (html, cls = "") => `<div class="${cls}">${html}</div>`;
+    const common = (v) => c(esc(v.month + "-" + v.seq), "num muted");
+    const rest = (v, l) => c(v.fieldId && state.fieldsById[v.fieldId] ? `<span class="fd"><b>${esc(state.fieldsById[v.fieldId].no)}</b>${esc(hk(state.fieldsById[v.fieldId].name))}</span>` : "") +
+      c(esc(hk((state.partiesById[v.partyId] || {}).name || ""))) + c(esc(memoOf(v, l)) + (v.late ? ' <span class="chip late">後日記帳</span>' : ""), "memo");
+    let cols, head, body, foot;
     const n = rows.length;
-    let foot, avgBase;
     if (ledgerMode) {
-      const d = rows.reduce((s, x) => s + (x.l.side === "debit" ? x.l.amount : 0), 0);
-      const cr = rows.reduce((s, x) => s + (x.l.side === "credit" ? x.l.amount : 0), 0);
-      avgBase = d + cr;
-      foot = `<tr class="tot"><td colspan="6">${n}件　平均 ¥${yen(n ? Math.round(avgBase / n) : 0)}</td><td class="r num">${yen(d)}</td><td class="r num">${yen(cr)}</td>${single ? `<td class="r num">${yen(shown.length ? rows[rows.length - 1].bal : res.opening)}</td>` : ""}</tr>`;
+      cols = single ? "100px 100px minmax(170px,1.3fr) minmax(120px,1fr) minmax(110px,1fr) minmax(140px,1.4fr) 100px 100px 110px"
+        : "100px 100px minmax(170px,1.3fr) minmax(120px,1fr) minmax(110px,1fr) minmax(140px,1.4fr) 100px 100px";
+      head = ["日付", "伝番", "相手科目", "分野", "取引先", "摘要"].map((t) => c(t)).join("") + c("借方", "r") + c("貸方", "r") + (single ? c("残高", "r") : "");
+      body = (single ? `<div class="lgr open">${c("月初（期間の初め）残高", "r span8")}${c(yen(res.opening), "r num")}</div>` : "") +
+        shown.map((x, k) => `<div class="lgr ${k % 2 ? "alt" : ""}" data-vid="${esc(x.v.id)}">${c(dateCell(x.v))}${common(x.v)}${c(counterpart(x.v, x.l))}${rest(x.v, x.l)}` +
+          c(x.l.side === "debit" ? yen(x.l.amount) : "", "r num") + c(x.l.side === "credit" ? yen(x.l.amount) : "", "r num") + (single ? c(yen(x.bal), "r num b") : "") + `</div>`).join("");
+      const d = rows.reduce((sum, x) => sum + (x.l.side === "debit" ? x.l.amount : 0), 0);
+      const cr = rows.reduce((sum, x) => sum + (x.l.side === "credit" ? x.l.amount : 0), 0);
+      foot = `<div class="lgr tot">${c(`${n}件　平均 ¥${yen(n ? Math.round((d + cr) / n) : 0)}`, "span6")}${c(yen(d), "r num")}${c(yen(cr), "r num")}${single ? c(yen(shown.length ? rows[rows.length - 1].bal : res.opening), "r num") : ""}</div>`;
     } else {
-      const t = rows.reduce((s, x) => s + x.total, 0);
-      foot = `<tr class="tot"><td colspan="7">${n}件　平均 ¥${yen(n ? Math.round(t / n) : 0)}</td><td class="r num">${yen(t)}</td></tr>`;
+      cols = "100px 100px minmax(170px,1.4fr) minmax(170px,1.4fr) minmax(120px,1fr) minmax(110px,1fr) minmax(140px,1.4fr) 110px";
+      head = ["日付", "伝番", "借方", "貸方", "分野", "取引先", "摘要"].map((t) => c(t)).join("") + c("金額", "r");
+      body = shown.map((x, k) => `<div class="lgr ${k % 2 ? "alt" : ""}" data-vid="${esc(x.v.id)}">${c(dateCell(x.v))}${common(x.v)}${c(accsOf(x.v, "debit"))}${c(accsOf(x.v, "credit"))}${rest(x.v, null)}${c(yen(x.total), "r num")}</div>`).join("");
+      const t = rows.reduce((sum, x) => sum + x.total, 0);
+      foot = `<div class="lgr tot">${c(`${n}件　平均 ¥${yen(n ? Math.round(t / n) : 0)}`, "span7")}${c(yen(t), "r num")}</div>`;
     }
+    if (!shown.length) body += `<div class="lgempty">条件に合う仕訳はありません。</div>`;
+    $("lg-grid").style.setProperty("--cols", cols);
+    $("lg-head").innerHTML = `<div class="lgr lgh">${head}</div>`;
+    $("lg-body").innerHTML = body;
     $("lg-foot").innerHTML = foot;
     $("lg-title").textContent = `結果　${n}件${n > LIMIT ? `（先頭の${LIMIT}件を表示）` : ""}`;
 
@@ -353,13 +353,15 @@ function drawScreen(all) {
       });
       const list = [...groups.entries()];
       if (L.mode === "party") list.sort((a, b) => (b[1].d + b[1].c + b[1].t) - (a[1].d + a[1].c + a[1].t));
-      sub.innerHTML = `<table class="tbl lg sub"><thead><tr><th>${L.mode === "month" ? "月度" : "取引先"}</th><th class="r">件数</th>${ledgerMode ? '<th class="r">借方</th><th class="r">貸方</th>' : '<th class="r">金額</th>'}</tr></thead><tbody>` +
-        list.map(([k, g]) => `<tr><td>${esc(k)}</td><td class="r num">${g.n}</td>${ledgerMode ? `<td class="r num">${yen(g.d)}</td><td class="r num">${yen(g.c)}</td>` : `<td class="r num">${yen(g.t)}</td>`}</tr>`).join("") + `</tbody></table>`;
+      const sc = ledgerMode ? "180px 90px 130px 130px" : "180px 90px 130px";
+      const cell = (h, cls = "") => `<div class="${cls}">${h}</div>`;
+      sub.innerHTML = `<div class="lgsub" style="--cols:${sc}"><div class="lgr lgh">${cell(L.mode === "month" ? "月度" : "取引先")}${cell("件数", "r")}${ledgerMode ? cell("借方", "r") + cell("貸方", "r") : cell("金額", "r")}</div>` +
+        list.map(([k, g]) => `<div class="lgr">${cell(esc(k))}${cell(g.n, "r num")}${ledgerMode ? cell(yen(g.d), "r num") + cell(yen(g.c), "r num") : cell(yen(g.t), "r num")}</div>`).join("") + `</div>`;
     }
   }
 
   $("lg-body").addEventListener("click", (e) => {
-    const tr = e.target.closest("tr[data-vid]");
+    const tr = e.target.closest("[data-vid]");
     if (!tr) return;
     const v = all.find((x) => x.id === tr.dataset.vid);
     if (v) openEdit(v, () => renderLedger());

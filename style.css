@@ -198,16 +198,24 @@ button.danger:hover { background: #fdecea; }
 .amtrange input { width: 110px; padding: 6px 8px; border: 1px solid #aaa; border-radius: 6px; text-align: right; }
 .checks { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 13px; }
 .checks label { display: inline-flex; align-items: center; gap: 4px; }
-.tbl.lg { min-width: 900px; }
-.tbl.lg th.r, .tbl.lg td.r { text-align: right; }
-.tbl.lg tr.open td { background: #f5f2ea; font-size: 12.5px; }
-.tbl.lg tr.tot td { background: #2b3a55; color: #fff; font-weight: bold; border-right: none; }
-.tbl.lg .wd { margin-left: 4px; font-size: 11px; color: #5f6672; } .tbl.lg .wd.sat { color: #1a4fb5; } .tbl.lg .wd.sun { color: #b3261e; }
-.tbl.lg.sub { min-width: 0; width: auto; margin: 12px 16px; }
 a.lk { color: inherit; text-decoration: none; } a.lk:hover { text-decoration: underline; color: #1a4fb5; }
 @media (max-width: 900px) { .lggrid { grid-template-columns: 1fr; } }
 
-/* F修正：結果の表は、必ず十分な高さで表示し、長いときは表の中だけスクロールする（見出しは固定） */
-.tablewrap.lgwrap { overflow: auto; min-height: 320px; max-height: calc(100vh - 140px); height: auto; }
-.tbl.lg thead th { position: sticky; top: 0; z-index: 1; }
-.tbl.lg tfoot td { position: sticky; bottom: 0; }
+/* F：結果の表は、表（table）ではなく行ごとの格子で作る（ブラウザによる崩れを防ぐ） */
+.lgscroll { overflow-x: auto; }
+.lgtable { min-width: 1050px; }
+.lgr { display: grid; grid-template-columns: var(--cols); }
+.lgr > div { padding: 7px 10px; border-bottom: 1px solid #e7e3da; border-right: 1px solid #efece5; background: #fff; display: flex; align-items: center; flex-wrap: wrap; min-width: 0; overflow: hidden; font-size: 13.5px; }
+.lgr > div.r { justify-content: flex-end; }
+.lgr > div.memo { white-space: normal; }
+.lgr > div.b { font-weight: bold; }
+.lgr.alt > div { background: #fbfaf6; }
+.lgr[data-vid] { cursor: pointer; }
+.lgr[data-vid]:hover > div { background: #eaf0fb; }
+.lgr.lgh > div { background: #2b3a55; color: #fff; font-weight: bold; font-size: 12px; border-right: 1px solid #3b4c6b; }
+.lgr.open > div { background: #f5f2ea; font-size: 12.5px; }
+.lgr.tot > div { background: #2b3a55; color: #fff; font-weight: bold; border-right: none; }
+.lgr > div.span6 { grid-column: span 6; } .lgr > div.span7 { grid-column: span 7; } .lgr > div.span8 { grid-column: span 8; }
+.lgr .wd { margin-left: 4px; font-size: 11px; color: #5f6672; } .lgr .wd.sat { color: #1a4fb5; } .lgr .wd.sun { color: #b3261e; }
+.lgempty { padding: 24px; text-align: center; color: #777; background: #fff; }
+.lgsub { margin: 12px 16px; display: inline-block; }
