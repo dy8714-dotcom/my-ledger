@@ -41,6 +41,7 @@ export const state = {
   stats: { accField: {}, fieldParty: {} },
   allVouchers: null,
   assets: [],
+  closings: [],
   lg: null,
   savedSearches: null,
   lastBackupAt: null,
@@ -97,6 +98,13 @@ export async function loadAssets() {
   return state.assets;
 }
 
+export async function loadClosings() {
+  state.closings = toList(await getDocs(col("closings")));
+  return state.closings;
+}
+// 締めた月かどうか
+export const isClosed = (month) => (state.closings || []).some((c) => c.month === month && c.status === "closed");
+
 export async function loadAll() {
   const [a, f] = await Promise.all([getDocs(col("accounts")), getDocs(col("fields"))]);
   state.accounts = toList(a).sort((x, y) => x.no - y.no);
@@ -106,6 +114,7 @@ export async function loadAll() {
   await loadParties();
   await loadStats();
   await loadBackupInfo();
+  try { await loadClosings(); } catch (err) { console.error("[月次締め] 読み込み失敗", err); state.closings = []; }
   try { await loadAssets(); } catch (err) { console.error("[月割り償却] 読み込み失敗", err); state.assets = []; }
 }
 

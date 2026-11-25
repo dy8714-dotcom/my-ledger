@@ -1,6 +1,6 @@
 // 月割り償却（手順I2a）：資産の登録と予定表
-import { state, col, db, loadAssets, loadVouchers, fetchMonthVouchers } from "./state.js?v=0.2I3";
-import { $, esc, yen, ymd, openModal, closeModal, showError } from "./util.js?v=0.2I3";
+import { state, col, db, loadAssets, loadVouchers, fetchMonthVouchers, isClosed } from "./state.js?v=0.2I4";
+import { $, esc, yen, ymd, openModal, closeModal, showError } from "./util.js?v=0.2I4";
 import { doc, addDoc, updateDoc, writeBatch, arrayUnion, serverTimestamp } from "https://www.gstatic.com/firebasejs/13.4.0/firebase-firestore.js";
 
 // ---------- 計算（画面に依存しない部分） ----------
@@ -280,6 +280,8 @@ function openDraftDialog(onDone) {
   $("dp-ok").addEventListener("click", async () => {
     const picks = [...document.querySelectorAll("#modal input[data-i]")].filter((c) => c.checked).map((c) => d[Number(c.dataset.i)]);
     if (!picks.length) return ($("dp-msg").textContent = "登録する行を選んでください。");
+    const cm = [...new Set(picks.map((p) => p.month))].filter(isClosed);
+    if (cm.length && !window.confirm(`${cm.join("・")}月度は締め済みです。償却を登録すると、締めたときの残高とずれます。続けますか？`)) return;
     $("dp-ok").disabled = true; $("dp-cancel").disabled = true;
     try {
       await postDrafts(picks, (k) => { $("dp-msg").textContent = `登録しています… ${k}／${picks.length}`; });

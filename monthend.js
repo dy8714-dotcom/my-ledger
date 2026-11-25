@@ -1,7 +1,8 @@
 // 月末（手順I3）：金融資産の評価替え
-import { state, col, db, loadAllVouchers, loadVouchers, fetchMonthVouchers } from "./state.js?v=0.2I3";
-import { $, esc, yen, ymd, hk, shiftMonth, monthOf, WD, showError } from "./util.js?v=0.2I3";
-import { doc, getDocs, writeBatch, deleteField, serverTimestamp } from "https://www.gstatic.com/firebasejs/13.4.0/firebase-firestore.js";
+import { state, col, db, loadAllVouchers, loadVouchers, fetchMonthVouchers, loadClosings, isClosed, loadAssets } from "./state.js?v=0.2I4";
+import { pendingDrafts } from "./assets.js?v=0.2I4";
+import { $, esc, yen, ymd, hk, shiftMonth, monthOf, WD, showError } from "./util.js?v=0.2I4";
+import { doc, getDocs, writeBatch, setDoc, deleteField, serverTimestamp, arrayUnion } from "https://www.gstatic.com/firebasejs/13.4.0/firebase-firestore.js";
 
 const EVAL_NOS = [26, 27, 28, 29, 30]; // 評価替えの対象（金融資産）
 // 評価益・評価損の科目：仮想通貨＝80/81、そのほか（株）＝82/83
@@ -44,9 +45,24 @@ async function loadValuations() {
   return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
 }
 
+// 「月末」タブ：月次締め／評価替えの2つ
 export async function renderMonthEnd() {
-  const view = $("view");
   const me = (state.me = state.me || { month: state.month, date: "" });
+  me.sub = me.sub || "close";
+  $("view").innerHTML = `<div class="subtabs">
+    <button type="button" data-sub="close" class="${me.sub === "close" ? "active" : ""}">月次締め</button>
+    <button type="button" data-sub="eval" class="${me.sub === "eval" ? "active" : ""}">評価替え</button></div><div id="me-body"></div>`;
+  document.querySelector("#view .subtabs").addEventListener("click", (e) => {
+    const b = e.target.closest("button[data-sub]");
+    if (!b) return;
+    me.sub = b.dataset.sub; renderMonthEnd();
+  });
+  if (me.sub === "close") return renderClose($("me-body"));
+  return renderEval($("me-body"));
+}
+
+async function renderEval(view) {
+  const me = state.me;
   const month = me.month;
   const monthEnd = lastDayOf(month);
   if (!me.date || monthOf(me.date) !== month) me.date = monthEnd;
@@ -116,6 +132,7 @@ export async function renderMonthEnd() {
       todo.push({ ...rows[i], value: v });
     }
     if (!todo.length) return ($("me-msg").textContent = "時価を入れた科目がありません。");
+    if (isClosed(month) && !window.confirm(`${month}月度は締め済みです。評価替えを登録すると、締めたときの残高とずれます。続けますか？`)) return;
     $("me-go").disabled = true;
     try {
       const made = await postEval(todo, month, me.date, isEnd, live);
@@ -165,4 +182,139 @@ export async function postEval(todo, month, date, isEnd, live) {
   state.allVouchers = null;
   await loadVouchers();
   return (isEnd ? "登録しました。" : "記録しました。") + msgs.join("　");
+}
+
+// ---------- 月次締め（I4） ----------
+// 指定した日までの、全科目の残高（借方−貸方）
+export function balancesAt(vouchers, date) {
+  const b = {};
+  vouchers.forEach((v) => {
+    if (v.date > date) return;
+    v.lines.forEach((l) => { b[l.accId] = (b[l.accId] || 0) + (l.side === "debit" ? l.amount : -l.amount); });
+  });
+  Object.keys(b).forEach((k) => { if (b[k] === 0) delete b[k]; });
+  return b;
+}
+// 締めた時の控えと、いまの計算結果の違い
+export function diffBalances(saved, now) {
+  const out = [];
+  new Set([...Object.keys(saved || {}), ...Object.keys(now)]).forEach((id) => {
+    const a = (saved || {})[id] || 0, b = now[id] || 0;
+    if (a !== b) out.push({ accId: id, saved: a, now: b });
+  });
+  return out.sort((p, q) => ((state.accountsById[p.accId] || {}).no || 999) - ((state.accountsById[q.accId] || {}).no || 999));
+}
+// 締め済みの月に記帳・修正・削除するときの確認（保存の前に出す）。返り値：true＝続ける
+export function askClosedConfirm(months, anchorEl) {
+  const closed = [...new Set(months)].filter(isClosed);
+  if (!closed.length) return Promise.resolve(true);
+  return new Promise((resolve) => {
+    const box = document.createElement("div");
+    box.className = "askbox";
+    box.innerHTML = `<p><strong>${closed.map(esc).join("・")}月度は「締め済み」です。</strong>この月に記帳・修正・削除すると、締めたときの残高とずれます。</p>
+      <p class="note">続けた場合は、「月末」タブの月次締めに「締めた後に変わった」と表示されます。</p>
+      <div class="actions"><button type="button" class="sub" data-c="no">やめる</button><button type="button" class="primary" data-c="yes">それでも続ける</button></div>`;
+    anchorEl.insertAdjacentElement("afterend", box);
+    box.addEventListener("click", (e) => { const b = e.target.closest("button[data-c]"); if (!b) return; box.remove(); resolve(b.dataset.c === "yes"); });
+  });
+}
+
+async function renderClose(view) {
+  const me = state.me, month = me.month, end = lastDayOf(month);
+  view.innerHTML = `<p class="note">読み込み中…</p>`;
+  let all, vals;
+  try { all = await loadAllVouchers(); vals = await loadValuations(); await loadClosings(); await loadAssets(); }
+  catch (err) { view.innerHTML = ""; showError("読み込みに失敗しました：" + (err.code || err.message)); return; }
+  const closing = (state.closings || []).find((c) => c.month === month);
+  const closed = !!closing && closing.status === "closed";
+  const upto = all.filter((v) => v.date <= end);
+  let dr = 0, cr = 0, bad = 0;
+  upto.forEach((v) => {
+    const d = v.lines.filter((l) => l.side === "debit").reduce((s, l) => s + l.amount, 0), c = v.lines.filter((l) => l.side === "credit").reduce((s, l) => s + l.amount, 0);
+    dr += d; cr += c; if (d !== c) bad++;
+  });
+  const now = balancesAt(all, end);
+  const drafts = pendingDrafts(end);
+  const evalMiss = EVAL_NOS.map(accByNo).filter((a) => a && !a.hidden && (now[a.id] || 0) !== 0)
+    .filter((a) => !vals.some((x) => x.id === `${a.id}_${end}`) && !all.some((v) => v.id === evalId(a.id, month)));
+  const manual = (me.manual = me.manual && me.manual.month === month ? me.manual : { month, recurring: false, points: false });
+  const okBal = dr === cr && bad === 0;
+  const okDep = drafts.length === 0, okEval = evalMiss.length === 0;
+  const mark = (ok) => (ok ? `<span class="ok">✓</span>` : `<span class="ng">⚠</span>`);
+  const changed = closed ? diffBalances(closing.balances, now) : [];
+  const ts = (x) => (x && x.toDate ? x.toDate() : x ? new Date(x) : null);
+  view.innerHTML = `
+    <div class="monthbar">
+      <button type="button" class="navbtn" id="cl-prev" aria-label="前の月度">◀</button>
+      <h2>${esc(month)}月度の月次締め ${closed ? `<span class="chip biz">締め済み</span>` : ""}</h2>
+      <button type="button" class="navbtn" id="cl-next" aria-label="次の月度">▶</button>
+    </div>
+    <section class="panel">
+      <h3><span class="bar"></span>締めのチェックリスト（${esc(month)}月度：${esc(end)}まで）</h3>
+      <div class="tablewrap"><table class="tbl" style="min-width:0"><tbody>
+        <tr><td style="width:40px"><input type="checkbox" id="cl-m1" ${manual.recurring ? "checked" : ""} ${closed ? "disabled" : ""}></td><td>定期支払（☆★◇◆）がすべて記帳されている</td><td class="note">定期支払の機能はまだないので、自分で確認してチェックします</td></tr>
+        <tr><td>${mark(okDep)}</td><td>月割り償却の仕訳を登録した</td><td class="note">${okDep ? "未計上なし" : `未計上が${drafts.length}件あります（記帳画面の上の「確認する」から登録）`}</td></tr>
+        <tr><td>${mark(okEval)}</td><td>金融資産の評価替えをした</td><td class="note">${okEval ? "残高のある科目はすべて入力済み" : `未入力：${evalMiss.map((a) => esc(a.no + a.name)).join("、")}（「評価替え」タブ）`}</td></tr>
+        <tr><td><input type="checkbox" id="cl-m2" ${manual.points ? "checked" : ""} ${closed ? "disabled" : ""}></td><td>ポイントの残高合わせ（任意）</td><td class="note">残高合わせの機能はまだないので、必要なら手で記帳してチェックします</td></tr>
+        <tr><td>${mark(okBal)}</td><td>貸借が一致している</td><td class="note">借方計 ¥${yen(dr)}／貸方計 ¥${yen(cr)}${bad ? `（借方と貸方が合わない仕訳が${bad}件）` : ""}</td></tr>
+      </tbody></table></div>
+      ${closed ? `
+        <p class="note">${esc(month)}月度は ${ts(closing.closedAt) ? esc(ts(closing.closedAt).toLocaleString("ja-JP")) : ""} に締めました（締めた時の残高の控えを保存済み）。</p>
+        ${changed.length ? `<div class="askbox"><p><strong>⚠ 締めた後に変わりました。</strong>締めた時の控えと、いまの計算結果がずれている科目があります。</p>
+          <table class="tbl" style="min-width:0"><thead><tr><th>科目</th><th class="amt">締めた時</th><th class="amt">いま</th><th class="amt">差</th></tr></thead><tbody>
+          ${changed.map((c) => { const a = state.accountsById[c.accId] || {}; return `<tr><td>${esc(a.no)} ${esc(hk(a.name || c.accId))}</td><td class="amt">${yen(c.saved)}</td><td class="amt">${yen(c.now)}</td><td class="amt">${c.now - c.saved > 0 ? "+" : "−"}${yen(Math.abs(c.now - c.saved))}</td></tr>`; }).join("")}</tbody></table></div>` : `<p class="ok">✓ 締めた時の残高と、いまの計算結果は一致しています。</p>`}
+        <div class="actions" style="justify-content:flex-start"><button type="button" class="danger" id="cl-reopen">締めを解除する</button></div>`
+      : `<p id="cl-msg" class="note">${okDep && okEval && okBal && manual.recurring ? "すべてそろっています。" : "そろっていない項目があります。確認してから締めてください。"}</p>
+        <div class="actions" style="justify-content:flex-start"><button type="button" class="primary" id="cl-close">${esc(month)}月度を締める</button></div>
+        <p class="note">締めると、その月の全科目の残高を「控え」として保存します。締めたあとにその月へ記帳すると確認画面が出て、控えとずれると「締めた後に変わった」と表示します。</p>`}
+    </section>
+    ${closedListHtml(all)}`;
+  $("cl-prev").addEventListener("click", () => { me.month = shiftMonth(month, -1); me.date = ""; renderMonthEnd(); });
+  $("cl-next").addEventListener("click", () => { me.month = shiftMonth(month, 1); me.date = ""; renderMonthEnd(); });
+  if ($("cl-m1")) $("cl-m1").addEventListener("change", (e) => { manual.recurring = e.target.checked; });
+  if ($("cl-m2")) $("cl-m2").addEventListener("change", (e) => { manual.points = e.target.checked; });
+  if ($("cl-close")) $("cl-close").addEventListener("click", async () => {
+    const miss = [];
+    if (!manual.recurring) miss.push("定期支払の確認");
+    if (!okDep) miss.push("月割り償却");
+    if (!okEval) miss.push("評価替え");
+    if (!okBal) miss.push("貸借の一致");
+    if (miss.length && !window.confirm(`次の項目がそろっていません：${miss.join("、")}\nそれでも締めますか？`)) return;
+    $("cl-close").disabled = true;
+    try {
+      await closeMonth(month, now, upto.length, { recurring: manual.recurring, points: manual.points });
+      renderMonthEnd();
+    } catch (err) {
+      console.error("[月次締め]", err);
+      $("cl-close").disabled = false;
+      $("cl-msg").textContent = "失敗しました：" + (err.code || err.message);
+    }
+  });
+  if ($("cl-reopen")) $("cl-reopen").addEventListener("click", async () => {
+    if (!window.confirm(`${month}月度の締めを解除します。解除の記録は残ります。よろしいですか？`)) return;
+    try { await reopenMonth(month); renderMonthEnd(); } catch (err) { console.error(err); showError("解除に失敗しました：" + (err.code || err.message)); }
+  });
+  view.querySelectorAll("button[data-goto]").forEach((b) => b.addEventListener("click", () => { me.month = b.dataset.goto; me.date = ""; renderMonthEnd(); }));
+}
+
+// 締めた月の一覧（締めた後に変わった月に⚠）
+function closedListHtml(all) {
+  const list = (state.closings || []).filter((c) => c.status === "closed").sort((p, q) => (p.month < q.month ? 1 : -1));
+  if (!list.length) return "";
+  return `<section class="panel"><h3><span class="bar"></span>締めた月の一覧</h3><div class="tablewrap"><table class="tbl" style="min-width:0"><thead><tr><th>月度</th><th>状態</th><th></th></tr></thead><tbody>
+    ${list.map((c) => { const n = diffBalances(c.balances, balancesAt(all, lastDayOf(c.month))).length;
+      return `<tr><td>${esc(c.month)}</td><td>${n ? `<span class="ng">⚠ 締めた後に変わった（${n}科目）</span>` : `<span class="ok">✓ 控えと一致</span>`}</td><td><button type="button" class="sub" data-goto="${esc(c.month)}">開く</button></td></tr>`; }).join("")}
+    </tbody></table></div></section>`;
+}
+
+export async function closeMonth(month, balances, count, manual) {
+  await setDoc(doc(col("closings"), month.replace(".", "_")), {
+    month, status: "closed", closedAt: serverTimestamp(), balances, voucherCount: count, manual,
+    history: arrayUnion({ at: Date.now(), act: "締める" })
+  }, { merge: true });
+  await loadClosings();
+}
+export async function reopenMonth(month) {
+  await setDoc(doc(col("closings"), month.replace(".", "_")), { month, status: "open", reopenedAt: serverTimestamp(), history: arrayUnion({ at: Date.now(), act: "解除" }) }, { merge: true });
+  await loadClosings();
 }

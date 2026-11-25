@@ -1,13 +1,15 @@
 // 記帳画面（入力欄と仕訳の一覧）
-import { state, col, db, loadParties, loadVouchers, fetchMonthVouchers } from "./state.js?v=0.2I3";
-import { downloadFullBackup } from "./backup.js?v=0.2I3";
-import { renderDeprBanner, askDeprChange, afterDeprEdit } from "./assets.js?v=0.2I3";
+import { state, col, db, loadParties, loadVouchers, fetchMonthVouchers } from "./state.js?v=0.2I4";
+import { downloadFullBackup } from "./backup.js?v=0.2I4";
+import { renderDeprBanner, askDeprChange, afterDeprEdit } from "./assets.js?v=0.2I4";
+import { askClosedConfirm } from "./monthend.js?v=0.2I4";
+import { isClosed } from "./state.js?v=0.2I4";
 import { $, esc, norm, hk, yen, parseAmount, WD, ymd, monthOf, shiftMonth, firstDayOf, accChip, openModal, closeModal }
-  from "./util.js?v=0.2I3";
-import { createCombo } from "./combo.js?v=0.2I3";
+  from "./util.js?v=0.2I4";
+import { createCombo } from "./combo.js?v=0.2I4";
 import { doc, setDoc, updateDoc, deleteDoc, writeBatch, serverTimestamp, increment, arrayUnion, deleteField }
   from "https://www.gstatic.com/firebasejs/13.4.0/firebase-firestore.js";
-import { patternsOf, sortPatterns, describePattern, addPattern, fromTemplate } from "./patterns.js?v=0.2I3";
+import { patternsOf, sortPatterns, describePattern, addPattern, fromTemplate } from "./patterns.js?v=0.2I4";
 
 // ---------- 候補の作り方 ----------
 const isBlank = (a) => a.name.startsWith("（") || a.name === "ー";
@@ -507,6 +509,15 @@ function mountVoucherForm(root, { voucher = null, onSaved, onCancel, onDeleted }
     applyBiz(lines);
     const pv = party.getValue();
     const fv = field.getValue().id || "";
+    // 締め済みの月に記帳・修正するときは確認する
+    {
+      const months = [monthOf(date)];
+      if (isEdit) months.push(voucher.month);
+      saveBtn.disabled = true;
+      const go = await askClosedConfirm(months, saveBtn.parentElement);
+      saveBtn.disabled = false;
+      if (!go) return;
+    }
     // 月割り償却で自動で作った仕訳の金額を変えたときは、「今月だけ／来月以降も」をたずねる
     let deprMode = null, newDebit = 0;
     if (isEdit && voucher.auto === "depreciation" && voucher.assetId) {
@@ -600,6 +611,7 @@ function mountVoucherForm(root, { voucher = null, onSaved, onCancel, onDeleted }
       }
       clearTimeout(armed);
       del.disabled = true;
+      if (!(await askClosedConfirm([voucher.month], del.parentElement))) { del.disabled = false; del.textContent = "削除"; armed = null; return; }
       try {
         await updateDoc(doc(col("vouchers"), voucher.id), { deleted: true, deletedAt: Date.now(), updatedAt: serverTimestamp() }); // 完全には消さず「削除済み」にする（30日間は設定から戻せる）
         await loadVouchers();
@@ -879,6 +891,7 @@ function deleteSelected() {
     <h2>${vs.length}件の仕訳を削除します</h2>
     <ul class="dellist">${list}${vs.length > 12 ? `<li>…ほか${vs.length - 12}件</li>` : ""}</ul>
     <p class="note">削除の直前に、全データのバックアップ（JSONファイル）が自動でダウンロードされます。削除した仕訳は30日間、「設定」→「削除した仕訳」から元に戻せます。</p>
+    ${isClosed(state.month) ? `<p class="note"><strong>${esc(state.month)}月度は締め済みです。</strong>削除すると、締めたときの残高とずれます。</p>` : ""}
     <p id="dl-msg" class="note"></p>
     <div class="actions">
       <button type="button" class="sub" id="dl-cancel">やめる</button>
