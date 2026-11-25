@@ -4,37 +4,36 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>マイ帳簿サイト</title>
-<link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="style.css?v=0.1C">
 </head>
 <body>
 <header>
   <h1>マイ帳簿サイト</h1>
-  <span id="version" class="version">v0.1（手順B：ログイン確認）</span>
+  <div class="header-right">
+    <span id="user-email" class="user"></span>
+    <span id="version" class="version">v0.1（手順C：科目・分野の台帳）</span>
+    <button id="btn-logout" type="button" class="header-btn" hidden>ログアウト</button>
+  </div>
 </header>
+
+<nav id="nav" hidden>
+  <button type="button" data-tab="entry">記帳</button>
+  <button type="button" data-tab="trial">試算表</button>
+  <button type="button" data-tab="ledger">元帳・検索</button>
+  <button type="button" data-tab="settings">設定</button>
+</nav>
+
 <main>
   <section id="logged-out">
     <p>Googleアカウントでログインしてください。</p>
-    <button id="btn-login" type="button">Googleでログイン</button>
+    <button id="btn-login" type="button" class="primary">Googleでログイン</button>
   </section>
-
-  <section id="logged-in" hidden>
-    <p>ログイン中：<strong id="user-email"></strong></p>
-    <p>あなたのUID（ユーザー識別番号）：</p>
-    <p class="uidbox"><code id="user-uid"></code></p>
-    <button id="btn-copy-uid" type="button">UIDをコピー</button>
-
-    <h2>書き込み・読み込みテスト</h2>
-    <p class="note">Firestoreのルールを公開したあとに押してください。</p>
-    <button id="btn-write" type="button">テスト書き込み</button>
-    <button id="btn-read" type="button">テスト読み込み</button>
-    <p id="test-result" class="result"></p>
-
-    <hr>
-    <button id="btn-logout" type="button" class="sub">ログアウト</button>
-  </section>
-
   <p id="error" class="error" hidden></p>
+  <section id="view" hidden></section>
 </main>
-<script type="module" src="app.js"></script>
+
+<div id="modal" hidden></div>
+
+<script type="module" src="app.js?v=0.1C"></script>
 </body>
 </html>
