@@ -1,13 +1,13 @@
 // マイ帳簿サイト（ログインと、メニューの切り替え）
 import { GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged }
   from "https://www.gstatic.com/firebasejs/13.4.0/firebase-auth.js";
-import { auth, state, loadAll, loadVouchers } from "./state.js?v=0.2I2b";
-import { $, esc, showError } from "./util.js?v=0.2I2b";
-import { renderSettings } from "./settings.js?v=0.2I2b";
-import { renderEntry } from "./entry.js?v=0.2I2b";
-import { renderTrial } from "./trial.js?v=0.2I2b";
-import { renderLedger } from "./ledger.js?v=0.2I2b";
-import { renderBackupBanner } from "./backup.js?v=0.2I2b";
+import { auth, state, loadAll, loadVouchers } from "./state.js?v=0.2I1d";
+import { $, esc, showError } from "./util.js?v=0.2I1d";
+import { renderSettings } from "./settings.js?v=0.2I1d";
+import { renderEntry } from "./entry.js?v=0.2I1d";
+import { renderTrial } from "./trial.js?v=0.2I1d";
+import { renderLedger } from "./ledger.js?v=0.2I1d";
+import { renderBackupBanner } from "./backup.js?v=0.2I1d";
 
 $("btn-login").addEventListener("click", async () => {
   showError("");

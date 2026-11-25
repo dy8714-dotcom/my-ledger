@@ -239,3 +239,12 @@ a.lk { color: inherit; text-decoration: none; } a.lk:hover { text-decoration: un
 .fgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 0 16px; }
 .fgrid label[hidden] { display: none; }
 .fgrid input, .fgrid select { width: 100%; padding: 7px 8px; border: 1px solid #aaa; border-radius: 6px; font-size: 14px; box-sizing: border-box; }
+
+/* 一覧の見出し固定・移動ボタン（I1d） */
+.listwrap.fix { max-height: calc(100vh - 170px); overflow: auto; }
+.listwrap.fix thead th { position: sticky; top: 0; z-index: 3; }
+.tbl tfoot th { border-top: 2px solid #1f2d45; }
+.listnav { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 8px 14px; background: #f7f5f0; border-bottom: 1px solid #e2ddd2; }
+#nav-bottom { border-top: 1px solid #e2ddd2; border-bottom: none; }
+.listnav select { padding: 6px 8px; border: 1px solid #aaa; border-radius: 6px; font-size: 13.5px; }
+.listnav label { margin-left: 8px; }

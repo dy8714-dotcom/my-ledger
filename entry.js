@@ -1,13 +1,13 @@
 // 記帳画面（入力欄と仕訳の一覧）
-import { state, col, db, loadParties, loadVouchers, fetchMonthVouchers } from "./state.js?v=0.2I2b";
-import { downloadFullBackup } from "./backup.js?v=0.2I2b";
-import { renderDeprBanner } from "./assets.js?v=0.2I2b";
+import { state, col, db, loadParties, loadVouchers, fetchMonthVouchers } from "./state.js?v=0.2I1d";
+import { downloadFullBackup } from "./backup.js?v=0.2I1d";
+import { renderDeprBanner } from "./assets.js?v=0.2I1d";
 import { $, esc, norm, hk, yen, parseAmount, WD, ymd, monthOf, shiftMonth, firstDayOf, accChip, openModal, closeModal }
-  from "./util.js?v=0.2I2b";
-import { createCombo } from "./combo.js?v=0.2I2b";
+  from "./util.js?v=0.2I1d";
+import { createCombo } from "./combo.js?v=0.2I1d";
 import { doc, setDoc, updateDoc, deleteDoc, writeBatch, serverTimestamp, increment, arrayUnion, deleteField }
   from "https://www.gstatic.com/firebasejs/13.4.0/firebase-firestore.js";
-import { patternsOf, sortPatterns, describePattern, addPattern, fromTemplate } from "./patterns.js?v=0.2I2b";
+import { patternsOf, sortPatterns, describePattern, addPattern, fromTemplate } from "./patterns.js?v=0.2I1d";
 
 // ---------- 候補の作り方 ----------
 const isBlank = (a) => a.name.startsWith("（") || a.name === "ー";
@@ -625,19 +625,29 @@ export function renderEntry() {
         <label class="note" for="list-q">絞り込み</label>
         <input type="search" id="list-q" placeholder="取引先・摘要・金額・科目">
       </div>
-      <div class="tablewrap">
+      <div class="listnav" id="nav-top">${listNavHtml()}</div>
+      <div class="tablewrap listwrap${stickyOn() ? " fix" : ""}" id="listwrap">
         <table class="tbl">
           <thead><tr>
             <th class="chk"><input type="checkbox" id="sel-all" aria-label="表示中の仕訳をすべて選ぶ" title="表示中をすべて選ぶ／外す"></th><th>伝番</th><th>税率</th><th>借方</th><th>貸方</th><th>分野</th><th>取引先</th><th>摘要</th><th class="amt">金額</th><th>印</th>
           </tr></thead>
           <tbody id="vbody"></tbody>
+          <tfoot><tr><th class="chk"></th><th>伝番</th><th>税率</th><th>借方</th><th>貸方</th><th>分野</th><th>取引先</th><th>摘要</th><th class="amt">金額</th><th>印</th></tr></tfoot>
         </table>
       </div>
+      <div class="listnav" id="nav-bottom">${listNavHtml()}</div>
       <div class="totals" id="totals"></div>
     </section>`;
   $("m-prev").addEventListener("click", () => changeMonth(-1));
   $("m-next").addEventListener("click", () => changeMonth(1));
   $("list-q").addEventListener("input", drawList);
+  document.querySelectorAll(".listnav").forEach((nav) => {
+    nav.addEventListener("click", (e) => { const b = e.target.closest("button[data-nav]"); if (b) navGo(b.dataset.nav); });
+    nav.addEventListener("change", (e) => {
+      if (e.target.matches("select[data-jump]")) { jumpToDate(e.target.value); e.target.value = ""; }
+      if (e.target.matches("input[data-sticky]")) setSticky(e.target.checked);
+    });
+  });
   $("sel-all").addEventListener("change", (e) => {
     if (e.target.checked) curList.forEach((vo) => sel.add(vo.id)); else curList.forEach((vo) => sel.delete(vo.id));
     drawList();
@@ -695,6 +705,80 @@ export function openEdit(vo, after, seq) {
     onDeleted: () => { closeModal(); done(); }
   });
 }
+
+// ---------- 一覧のスクロール操作（手順I1d） ----------
+function stickyOn() {
+  try { return localStorage.getItem("ledger.stickyHead") !== "0"; } catch (e) { return true; } // 初期値は「固定する」
+}
+function setSticky(on) {
+  try { localStorage.setItem("ledger.stickyHead", on ? "1" : "0"); } catch (e) { /* 保存できなくても動く */ }
+  const lw = $("listwrap");
+  if (lw) lw.classList.toggle("fix", on);
+  document.querySelectorAll("input[data-sticky]").forEach((c) => { c.checked = on; });
+}
+function listNavHtml() {
+  return `<button type="button" class="sub" data-nav="top">⇈ 一番上へ</button>
+    <button type="button" class="sub" data-nav="prev">◀ 前へ</button>
+    <button type="button" class="sub" data-nav="next">次へ ▶</button>
+    <button type="button" class="sub" data-nav="bottom">一番下へ ⇊</button>
+    <select data-jump aria-label="日付を選んで移動"><option value="">日付を選んで移動…</option></select>
+    <label class="note"><input type="checkbox" data-sticky ${stickyOn() ? "checked" : ""}> 見出しを固定</label>`;
+}
+function drawJumpOptions(list) {
+  const days = [];
+  list.forEach((vo) => { const last = days[days.length - 1]; if (last && last.date === vo.date) last.n++; else days.push({ date: vo.date, n: 1 }); });
+  const opts = `<option value="">日付を選んで移動…</option>` + days.map((d) => {
+    const wd = new Date(d.date + "T00:00:00").getDay();
+    return `<option value="${esc(d.date)}">${esc(fmtMD(d.date))}（${WD[wd]}）${d.n}件</option>`;
+  }).join("");
+  document.querySelectorAll("select[data-jump]").forEach((s) => { s.innerHTML = opts; });
+}
+// スクロールの部品（見出しを固定しているときは一覧の中、していないときは画面全体を動かす）
+function scrollEnv() {
+  const lw = $("listwrap");
+  const fix = lw.classList.contains("fix");
+  const head = lw.querySelector("thead").getBoundingClientRect().height;
+  if (fix) {
+    return {
+      viewH: lw.clientHeight - head, head,
+      get top() { return lw.scrollTop; },
+      set top(y) { lw.scrollTo({ top: y, behavior: "smooth" }); },
+      max: lw.scrollHeight - lw.clientHeight,
+      posOf: (tr) => tr.getBoundingClientRect().top - lw.getBoundingClientRect().top + lw.scrollTop - head
+    };
+  }
+  return {
+    viewH: window.innerHeight - 40, head: 0,
+    get top() { return window.scrollY; },
+    set top(y) { window.scrollTo({ top: y, behavior: "smooth" }); },
+    max: document.documentElement.scrollHeight - window.innerHeight,
+    posOf: (tr) => tr.getBoundingClientRect().top + window.scrollY - 20
+  };
+}
+function navGo(act) {
+  const env = scrollEnv();
+  const rows = [...document.querySelectorAll("#vbody tr.day, #vbody tr.v1")]; // 日付の帯と、仕訳の先頭行だけを区切りにする
+  if (act === "top") { env.top = 0; return; }
+  if (act === "bottom") { env.top = env.max; return; }
+  const pos = rows.map((r) => env.posOf(r));
+  const cur = env.top;
+  if (act === "next") {
+    const i = pos.findIndex((p) => p > cur + env.viewH - 4); // いま見えている範囲の外にある、最初の行
+    env.top = i < 0 ? env.max : Math.max(0, pos[i]);
+  } else {
+    const goal = cur - env.viewH;
+    if (goal <= 0) { env.top = 0; return; }
+    const i = pos.findIndex((p) => p >= goal - 2);
+    env.top = i < 0 ? 0 : Math.max(0, pos[i]);
+  }
+}
+function jumpToDate(date) {
+  if (!date) return;
+  const tr = document.querySelector(`#vbody tr.day[data-date="${date}"]`);
+  if (!tr) return;
+  scrollScroll(tr);
+}
+function scrollScroll(tr) { const env = scrollEnv(); env.top = Math.max(0, env.posOf(tr)); }
 
 // ---------- 選んだ仕訳の一括操作（手順I1b） ----------
 const sel = new Set();      // 選んだ仕訳のid（表示中の月度だけ）
@@ -852,7 +936,7 @@ function voucherRows(vo, alt, check) {
   let html = "";
   for (let i = 0; i < n; i++) {
     const first = i === 0;
-    html += `<tr data-vid="${esc(vo.id)}" class="${cls}">
+    html += `<tr data-vid="${esc(vo.id)}" class="${cls}${first ? " v1" : ""}">
       ${check ? `<td class="chk">${first ? `<input type="checkbox" aria-label="この仕訳を選ぶ"${sel.has(vo.id) ? " checked" : ""}>` : ""}</td>` : ""}
       <td class="num muted ${multi && first ? "first" : ""}">${first ? esc(vo.month + "-" + vo.seq) : ""}</td>
       <td>${(() => { const l = debits[i] || credits[i] || {}; return multi || first ? (l.tax ? esc(l.tax) + "%" : "ー") : ""; })()}</td>
@@ -893,7 +977,7 @@ function drawList() {
       }));
       const wd = new Date(curDate + "T00:00:00").getDay();
       const wdc = wd === 6 ? "sat" : wd === 0 ? "sun" : "";
-      html += `<tr class="day"><td colspan="10"><div class="dh"><span class="d num">${esc(fmtMD(curDate))}</span>
+      html += `<tr class="day" data-date="${esc(curDate)}"><td colspan="10"><div class="dh"><span class="d num">${esc(fmtMD(curDate))}</span>
         <span class="wd ${wdc}">${WD[wd]}</span>
         <span class="pill out">支出 <span class="num">¥${yen(out)}</span></span>
         <span class="pill inc">収入 <span class="num">¥${yen(inc)}</span></span>
@@ -905,6 +989,7 @@ function drawList() {
   });
   if (!list.length) html = `<tr><td colspan="10" class="empty">この月度の仕訳はまだありません。</td></tr>`;
   $("vbody").innerHTML = html;
+  drawJumpOptions(list);
   drawSelBar();
   let dt = 0, ct = 0;
   state.vouchers.forEach((vo) => vo.lines.forEach((l) => { if (l.side === "debit") dt += l.amount; else ct += l.amount; }));
