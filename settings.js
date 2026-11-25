@@ -1,13 +1,14 @@
 // 設定画面（科目・分野の台帳）
-import { state, col, loadAll, loadParties } from "./state.js?v=0.1G";
-import { $, esc, norm, hk, showError } from "./util.js?v=0.1G";
+import { state, col, loadAll, loadParties } from "./state.js?v=0.1H";
+import { $, esc, norm, hk, showError } from "./util.js?v=0.1H";
 import { doc, setDoc, writeBatch, serverTimestamp, deleteField }
   from "https://www.gstatic.com/firebasejs/13.4.0/firebase-firestore.js";
 import { SEED_ACCOUNTS, SEED_FIELDS, CATEGORIES, CATEGORY_COLORS, KIND_LABELS, sideOf }
-  from "./seed.js?v=0.1G";
-import { db } from "./state.js?v=0.1G";
-import { renderBackup } from "./backup.js?v=0.1G";
-import { patternsOf, sortPatterns, describePattern } from "./patterns.js?v=0.1G";
+  from "./seed.js?v=0.1H";
+import { db } from "./state.js?v=0.1H";
+import { renderImport } from "./importer.js?v=0.1H";
+import { renderBackup } from "./backup.js?v=0.1H";
+import { patternsOf, sortPatterns, describePattern } from "./patterns.js?v=0.1H";
 
 // ---------- 設定画面 ----------
 export function renderSettings() {
@@ -17,6 +18,7 @@ export function renderSettings() {
       <button type="button" data-sub="fields" class="${state.sub === "fields" ? "active" : ""}">分野</button>
       <button type="button" data-sub="parties" class="${state.sub === "parties" ? "active" : ""}">取引先</button>
       <button type="button" data-sub="backup" class="${state.sub === "backup" ? "active" : ""}">バックアップ</button>
+      <button type="button" data-sub="import" class="${state.sub === "import" ? "active" : ""}">取り込み</button>
     </div>
     <div id="settings-body"></div>`;
   $("view").querySelector(".subtabs").addEventListener("click", (e) => {
@@ -29,6 +31,7 @@ export function renderSettings() {
   if (state.sub === "accounts") renderAccountsPage();
   else if (state.sub === "fields") renderFieldsPage();
   else if (state.sub === "backup") renderBackup();
+  else if (state.sub === "import") renderImport();
   else renderPartiesPage();
 }
 

@@ -1,6 +1,6 @@
 // バックアップ（手順G）：全データのJSON、仕訳のCSV
-import { state, col, loadAllVouchers } from "./state.js?v=0.1G";
-import { $, esc, ymd, showError } from "./util.js?v=0.1G";
+import { state, col, loadAllVouchers } from "./state.js?v=0.1H";
+import { $, esc, ymd, showError } from "./util.js?v=0.1H";
 import { getDocs, getDoc, doc } from "https://www.gstatic.com/firebasejs/13.4.0/firebase-firestore.js";
 
 function save(text, filename, mime, bom) {
@@ -42,14 +42,14 @@ const q = (x) => `"${String(x ?? "").replace(/"/g, '""')}"`;
 // 1明細行＝1行（複合仕訳も、同じ伝番で何行かに分かれる）
 function voucherCsv(list) {
   const acc = (id) => state.accountsById[id] || {};
-  const head = ["日付", "月度", "伝番", "借貸", "科目番号", "科目", "金額", "税区分", "摘要", "分野", "取引先", "事業", "印", "後日記帳", "記帳日"];
+  const head = ["日付", "月度", "伝番", "借貸", "科目番号", "科目", "金額", "税率", "摘要", "分野", "取引先", "事業", "印", "後日記帳", "記帳日"];
   const rows = [head.map(q).join(",")];
   list.forEach((v) => {
     (v.lines || []).forEach((l) => {
       rows.push([
         v.date, v.month, `${v.month}-${v.seq}`,
         l.side === "debit" ? "借方" : "貸方",
-        acc(l.accId).no ?? "", q(acc(l.accId).name || l.accId), l.amount ?? "", q(l.tax || ""), q(l.memo || ""),
+        acc(l.accId).no ?? "", q(acc(l.accId).name || l.accId), l.amount ?? "", l.tax ? l.tax : "", q(l.memo || ""),
         q((state.fieldsById[v.fieldId] || {}).name || ""), q((state.partiesById[v.partyId] || {}).name || ""),
         l.biz === "biz" ? "事業" : l.biz === "life" ? "生活" : "", q(v.mark || ""), v.late ? "後日" : "", v.entryDate || ""
       ].join(","));
