@@ -1,7 +1,7 @@
 // 試算表（科目ごとの 月初残高・借方・貸方・残高）
-import { state, loadAllVouchers } from "./state.js?v=0.1H2";
-import { $, esc, yen, accChip, shiftMonth, showError } from "./util.js?v=0.1H2";
-import { CATEGORIES } from "./seed.js?v=0.1H2";
+import { state, loadAllVouchers } from "./state.js?v=0.1H3";
+import { $, esc, yen, accChip, shiftMonth, showError } from "./util.js?v=0.1H3";
+import { CATEGORIES } from "./seed.js?v=0.1H3";
 
 // "26.11" → 通し番号（月ごとに +1）
 const idxOf = (m) => { const [y, mm] = m.split(".").map((x) => parseInt(x, 10)); return y * 12 + (mm - 1); };
@@ -35,6 +35,7 @@ export function computeTrial(vouchers, accountsById, S, E) {
   const rows = {};
   const get = (a) => rows[a.id] || (rows[a.id] = { a, raw: 0, dr: 0, cr: 0 });
   let allDr = 0, allCr = 0;
+  const pl = {}; // 月ごとの損益（収益−費用）
   vouchers.forEach((v) => {
     const mi = idxOf(v.month);
     if (mi > E) return;
@@ -43,6 +44,7 @@ export function computeTrial(vouchers, accountsById, S, E) {
       allCr += l.side === "credit" ? l.amount : 0;
       const a = accountsById[l.accId];
       if (!a) return;
+      if (!isBS(a)) pl[mi] = (pl[mi] || 0) + (l.side === "credit" ? l.amount : -l.amount);
       const r = get(a);
       if (mi < S) { if (isBS(a)) r.raw += l.side === "debit" ? l.amount : -l.amount; }
       else if (l.side === "debit") r.dr += l.amount; else r.cr += l.amount;
@@ -55,7 +57,15 @@ export function computeTrial(vouchers, accountsById, S, E) {
     const bal = open + (r.dr - r.cr) * sign;
     out[r.a.id] = { a: r.a, open, dr: r.dr, cr: r.cr, bal, diff: bal - open };
   });
-  return { rows: out, allDr, allCr };
+  return { rows: out, allDr, allCr, pl };
+}
+
+// 純資産の部に足す2行。X月末の時点で、前期までの損益（その年の1月より前の損益の合計）と当期純損益（その年の1月〜X月）
+export function equityParts(pl, X) {
+  const y0 = X - (X % 12);
+  let prev = 0, cur = 0;
+  Object.keys(pl).forEach((k) => { const m = +k; if (m > X) return; if (m < y0) prev += pl[k]; else cur += pl[k]; });
+  return { prev, cur };
 }
 
 const num = (n) => (n === 0 ? `<span class="muted">0</span>` : yen(n));
@@ -76,7 +86,7 @@ export async function renderTrial() {
 function draw(list) {
   const t = state.tb;
   const [S, E] = periodOf();
-  const { rows, allDr, allCr } = computeTrial(list, state.accountsById, S, E);
+  const { rows, allDr, allCr, pl } = computeTrial(list, state.accountsById, S, E);
   const all = Object.values(rows);
   const visible = (r) => !t.hideZero || r.open || r.dr || r.cr || r.bal;
   const periodDr = all.reduce((s, r) => s + r.dr, 0);
@@ -103,6 +113,23 @@ function draw(list) {
     });
   }
   if (!body) body = `<tr><td colspan="6" class="empty">この期間の仕訳はありません。</td></tr>`;
+
+  // 純資産の部：元入金などに、前期までの損益と当期純損益を足して、資産−負債＝純資産を確かめる
+  const eqOpen = equityParts(pl, S - 1), eqEnd = equityParts(pl, E);
+  const kindRows = (k) => all.filter((r) => r.a.kind === k);
+  const A = sum(kindRows("asset")), L = sum(kindRows("liability")), Q = sum(kindRows("equity"));
+  const eq = { open: Q.open + eqOpen.prev + eqOpen.cur, bal: Q.bal + eqEnd.prev + eqEnd.cur };
+  const gapOpen = A.open - L.open - eq.open, gapEnd = A.bal - L.bal - eq.bal;
+  const eqOk = gapOpen === 0 && gapEnd === 0;
+  const eqRow = (name, o, b, cls) => `<tr class="${cls || ""}"><td>${esc(name)}</td><td class="r num">${num(o)}</td><td class="r num muted">―</td><td class="r num muted">―</td><td class="r num" style="font-weight:700">${num(b)}</td><td class="r num">${diffHtml(b - o)}</td></tr>`;
+  if (all.length) {
+    body += `<tr class="grp"><td colspan="6">純資産の部（損益の繰越を含む）</td></tr>` +
+      eqRow("前期までの損益（繰越）", eqOpen.prev, eqEnd.prev) +
+      eqRow("当期純損益（その年の1月〜）", eqOpen.cur, eqEnd.cur) +
+      eqRow("純資産 計（元入金など＋上の2行）", eq.open, eq.bal, "sub") +
+      `<tr class="sub"><td>資産 計 − 負債 計</td><td class="r num">${yen(A.open - L.open)}</td><td></td><td></td><td class="r num">${yen(A.bal - L.bal)}</td><td></td></tr>` +
+      `<tr class="${eqOk ? "sub" : "tot"}" id="eq-check"><td>資産 − 負債 − 純資産</td><td class="r num">${yen(gapOpen)}</td><td></td><td></td><td class="r num">${yen(gapEnd)}</td><td>${eqOk ? "一致 ✓" : "合いません"}</td></tr>`;
+  }
 
   // 右側のカード
   const bsKind = (k) => all.filter((r) => r.a.kind === k);
@@ -184,6 +211,8 @@ function draw(list) {
     const lines = [["区分", "番号", "科目", "月初残高", "借方", "貸方", "残高", "増減"].map(q).join(",")];
     all.filter(visible).sort((x, y) => CATEGORIES.indexOf(x.a.category) - CATEGORIES.indexOf(y.a.category) || x.a.no - y.a.no)
       .forEach((r) => lines.push([q(r.a.category), r.a.no, q(r.a.name), r.open, r.dr, r.cr, r.bal, r.diff].join(",")));
+    lines.push([q("純資産の部"), "", q("前期までの損益（繰越）"), eqOpen.prev, "", "", eqEnd.prev, eqEnd.prev - eqOpen.prev].join(","));
+    lines.push([q("純資産の部"), "", q("当期純損益"), eqOpen.cur, "", "", eqEnd.cur, eqEnd.cur - eqOpen.cur].join(","));
     const blob = new Blob(["﻿" + lines.join("\r\n")], { type: "text/csv;charset=utf-8" });
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);

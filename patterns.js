@@ -1,5 +1,5 @@
 // 取引先ごとの「入力パターン」（科目の組み合わせ）の道具
-import { state } from "./state.js?v=0.1H2";
+import { state } from "./state.js?v=0.1H3";
 
 // 行の組み合わせを表す印（金額・摘要は見ない）
 export function sigOf(lines) {
