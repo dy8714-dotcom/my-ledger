@@ -183,7 +183,10 @@ function drawAccountRows() {
   const rows = state.accounts.filter((a) => {
     if (a.hidden && !state.showHidden) return false;
     if (!q) return true;
-    return norm(`${a.no} ${a.name} ${a.kana}`).includes(q);
+    // 番号・よみ・略称は先頭が合えば、科目名は途中でも合えば出す
+    return String(a.no).startsWith(q) ||
+      norm(a.kana).split(/\s+/).some((w) => w.startsWith(q)) ||
+      norm(a.name).includes(q);
   });
   $("tbody").innerHTML = rows.map((a) => {
     const blank = a.name.startsWith("（") || a.name === "ー";
