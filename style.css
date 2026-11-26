@@ -263,14 +263,12 @@ details.lump summary { cursor: pointer; font-weight: bold; }
 
 /* ===== 印刷（I6d） ===== */
 #printhead, #lg-ptable { display: none; }
-@page { size: A4 landscape; margin: 10mm; }
-@page tall { size: A4 portrait; margin: 10mm; }
+@page { size: A4 portrait; margin: 10mm; }
 @media print {
   body { background: #fff; font-size: 11px; color: #000; }
   header, nav, .bkbanner, #modal, .listnav, .selbar, .monthbar button, .monthbar .seg, .monthbar input, .monthbar .spacer,
   .panel:has(#entry-form), .lgbox, .panel-head input, .panel-head label, #tb-hide, #tb-byno, #st-cmp, #st-scope, #st-cmpm, .no-print { display: none !important; }
   main { max-width: none; margin: 0; padding: 0; }
-  #view[data-tab="trial"] { page: tall; }
   #printhead { display: flex; justify-content: space-between; align-items: baseline; border-bottom: 2px solid #2b3a55; padding-bottom: 3px; margin-bottom: 6px; font-size: 12px; }
   .monthbar { margin: 0 0 4px; }
   .monthbar h2 { font-size: 15px; min-width: 0 !important; text-align: left; }
@@ -279,7 +277,15 @@ details.lump summary { cursor: pointer; font-weight: bold; }
   .panel-head { padding: 2px 0; }
   .tablewrap, .listwrap, .listwrap.fix { overflow: visible !important; max-height: none !important; }
   .tbl, .tbl.tb { min-width: 0 !important; width: 100%; font-size: 10.5px; border-collapse: collapse; }
-  .tbl th, .tbl td { padding: 3px 5px; }
+  .tbl th, .tbl td { padding: 1.5px 4px; line-height: 1.25; white-space: normal; }
+  .tbl th { white-space: nowrap; }
+  .tbl td.num, .tbl td.amt, .tbl td.r { white-space: nowrap; }
+  .ac { padding: 0 4px 0 1px; font-size: 9.5px; gap: 3px; white-space: normal; }
+  .ac b { font-size: 9px; padding: 0 2px; min-width: 0; }
+  .fd { font-size: 9.5px; white-space: normal; gap: 2px; } .fd b { font-size: 9px; }
+  .chip { font-size: 9px; line-height: 13px; padding: 0 4px; margin-left: 3px; }
+  .tbl { font-size: 9.5px; }
+  .tbl td.mk, .tbl td.chk { white-space: nowrap; }
   .tbl th { background: #e9e5da !important; color: #000; border: 1px solid #999; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
   .tbl td { border-bottom: 1px solid #ccc; }
   thead { display: table-header-group; }
@@ -293,7 +299,9 @@ details.lump summary { cursor: pointer; font-weight: bold; }
   .tbl td.memo { width: auto; max-width: none; }
   .printsel tr[data-vid]:not(.sel), .printsel tr.pnone { display: none !important; }
   .tbl.tb tr.tot td { background: #e9e5da !important; color: #000; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-  .tbgrid { grid-template-columns: minmax(0, 1fr) 190px; gap: 8px; }
+  .tbgrid { display: block; }
+  .tbside { flex-direction: row; gap: 6px; margin-top: 6px; }
+  .tbside .card { flex: 1; }
   .tbside .card.note { display: none; }
   .card { padding: 4px 8px; border-radius: 4px; } .card .v { font-size: 14px; margin-top: 0; }
   .stgrid { grid-template-columns: 1fr 1fr; gap: 8px; }
@@ -301,12 +309,15 @@ details.lump summary { cursor: pointer; font-weight: bold; }
   /* 元帳：画面の格子は隠し、見出しが毎ページ付く表を出す */
   .lgscroll { display: none !important; }
   #lg-ptable { display: block; }
-  .ptbl { width: 100%; border-collapse: collapse; font-size: 10px; }
+  .ptbl { width: 100%; border-collapse: collapse; font-size: 9px; table-layout: auto; }
+  .ptbl td { white-space: normal; overflow-wrap: anywhere; }
   .ptbl th { background: #e9e5da !important; border: 1px solid #999; padding: 3px 5px; text-align: left; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-  .ptbl td { border-bottom: 1px solid #ccc; padding: 3px 5px; vertical-align: top; }
+  .ptbl td { border-bottom: 1px solid #ccc; padding: 2px 4px; vertical-align: top; }
+  .ptbl td.num, .ptbl td.r { white-space: nowrap; }
   .ptbl .r { text-align: right; } .ptbl td.memo { white-space: normal; overflow-wrap: anywhere; }
   .ptbl tr.tot td { font-weight: bold; border-top: 2px solid #333; }
   .lgsub { margin: 6px 0; }
   .lgsub .lgr > div { padding: 2px 6px; }
+  .ptbl .wd { margin-left: 2px; font-size: 8px; }
   a.lk { color: inherit; }
 }

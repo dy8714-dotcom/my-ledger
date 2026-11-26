@@ -1,6 +1,6 @@
 // 印刷の整備（I6d）：どの画面でも、ブラウザの「印刷」（Ctrl+P）でA4にきれいに出す
-import { $ } from "./util.js?v=0.2I6d";
-import { state } from "./state.js?v=0.2I6d";
+import { $ } from "./util.js?v=0.2I6e";
+import { state } from "./state.js?v=0.2I6e";
 
 const TAB = { entry: "記帳", trial: "試算表", bs: "B/S（貸借対照表）", pl: "P/L（損益計算書）", ledger: "元帳・検索", monthend: "月末", settings: "設定" };
 let selOnly = false;
@@ -24,9 +24,9 @@ function ledgerTable() {
   if (!grid) return;
   const cells = (r) => [...r.children].map((c) => {
     const m = /span(\d)/.exec(c.className);
-    return `<td class="${c.className}"${m ? ` colspan="${m[1]}"` : ""}>${c.innerHTML}</td>`;
+    return `<td class="${c.className.replace(/\bspan\d\b/g, "").trim()}"${m ? ` colspan="${m[1]}"` : ""}>${c.innerHTML}</td>`;
   }).join("");
-  const rows = (id) => [...$(id).querySelectorAll(".lgr")].map((r) => `<tr class="${r.className}">${cells(r)}</tr>`).join("");
+  const rows = (id) => [...$(id).querySelectorAll(".lgr")].map((r) => `<tr class="${r.className.replace(/\b(lgr|lgh|alt)\b/g, "").trim()}">${cells(r)}</tr>`).join("");
   const empty = $("lg-body").querySelector(".lgempty");
   let box = $("lg-ptable");
   if (!box) {

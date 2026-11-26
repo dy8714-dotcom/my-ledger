@@ -1,8 +1,8 @@
 // 元帳・検索（条件で絞り込み、科目を1つ選ぶと残高を積み上げて表示）
-import { state, col, loadAllVouchers } from "./state.js?v=0.2I6d";
-import { $, esc, norm, hk, yen, parseAmount, WD, accChip, showError } from "./util.js?v=0.2I6d";
-import { createCombo } from "./combo.js?v=0.2I6d";
-import { openEdit } from "./entry.js?v=0.2I6d";
+import { state, col, loadAllVouchers } from "./state.js?v=0.2I6e";
+import { $, esc, norm, hk, yen, parseAmount, WD, accChip, showError } from "./util.js?v=0.2I6e";
+import { createCombo } from "./combo.js?v=0.2I6e";
+import { openEdit } from "./entry.js?v=0.2I6e";
 import { doc, getDoc, setDoc } from "https://www.gstatic.com/firebasejs/13.4.0/firebase-firestore.js";
 
 const isBlank = (a) => a.name.startsWith("（") || a.name === "ー";

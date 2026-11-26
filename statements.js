@@ -1,7 +1,7 @@
 // B/S（貸借対照表）と P/L（損益計算書）。月ごとに、前月・昨年の同じ月・好きな月と比べられる
-import { state, loadAllVouchers } from "./state.js?v=0.2I6d";
-import { $, esc, yen, accChip, shiftMonth, showError } from "./util.js?v=0.2I6d";
-import { computeTrial, equityParts } from "./trial.js?v=0.2I6d";
+import { state, loadAllVouchers } from "./state.js?v=0.2I6e";
+import { $, esc, yen, accChip, shiftMonth, showError } from "./util.js?v=0.2I6e";
+import { computeTrial, equityParts } from "./trial.js?v=0.2I6e";
 
 const idxOf = (m) => { const [y, mm] = m.split(".").map((x) => parseInt(x, 10)); return y * 12 + (mm - 1); };
 export const keyOf = (idx) => String(Math.floor(idx / 12)).padStart(2, "0") + "." + ((idx % 12) + 1);
