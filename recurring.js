@@ -1,8 +1,9 @@
 // 定期支払（I7a）：☆定額・★変動・◇年払い・◆外貨 の登録と、記帳画面の「未記帳のお知らせ」
-import { state, col, db, loadRecurring, loadAllVouchers } from "./state.js?v=0.2I7a";
-import { $, esc, hk, yen, parseAmount, ymd, openModal, closeModal, showError } from "./util.js?v=0.2I7a";
+import { state, col, db, loadRecurring, loadAllVouchers } from "./state.js?v=0.2I7b";
+import { $, esc, hk, yen, parseAmount, ymd, openModal, closeModal, showError } from "./util.js?v=0.2I7b";
 import { doc, setDoc, deleteDoc, writeBatch, serverTimestamp } from "https://www.gstatic.com/firebasejs/13.4.0/firebase-firestore.js";
-import { fromTemplate } from "./patterns.js?v=0.2I7a";
+import { fromTemplate } from "./patterns.js?v=0.2I7b";
+import { offReason, shiftBusiness } from "./holidays.js?v=0.2I7b";
 
 export const MARKS = ["☆", "★", "◇", "◆"];
 const MARK_NAME = { "☆": "定額・毎月", "★": "金額が変わる・毎月", "◇": "年払い", "◆": "外貨建て・毎月" };
@@ -23,10 +24,32 @@ export function isDue(rec, month) {
   return true;
 }
 
-// 引き落とし日（31日指定、またはその月にない日は月末）
-export function dueDate(rec, month) {
+// 決めた日（31日指定、またはその月にない日は月末）
+export function baseDate(rec, month) {
   const d = Math.min(Math.max(parseInt(rec.day, 10) || 1, 1), daysIn(month));
   return `${ymOf(month)}-${String(d).padStart(2, "0")}`;
+}
+
+// 休日の扱い：決まっていなければ「次の平日」（定期収入を作るときは「前の平日」にする予定）
+export const holidayRule = (rec) => (rec.holiday === "prev" || rec.holiday === "none" ? rec.holiday : "next");
+
+// 引き落とし日（土日祝・年末年始なら、休日の扱いに合わせてずらした日）
+export function dueDate(rec, month) {
+  return shiftBusiness(baseDate(rec, month), holidayRule(rec));
+}
+
+// ずらしたときの理由（ずらしていなければ空）
+export function shiftReason(rec, month) {
+  const b = baseDate(rec, month);
+  return dueDate(rec, month) === b ? "" : offReason(b);
+}
+
+// ルールの説明文（備考の自動入力にも使う）
+export function explainRule(rec) {
+  const when = rec.mark === "◇" ? `毎年${rec.payMonth || "?"}月` : "毎月";
+  const day = parseInt(rec.day, 10) >= 31 ? "末日" : `${parseInt(rec.day, 10) || "?"}日`;
+  const rule = holidayRule(rec);
+  return `${when}${day}${rule === "next" ? "（土日祝・年末年始は翌平日）" : rule === "prev" ? "（土日祝・年末年始は前の平日）" : ""}`;
 }
 
 // 記帳済みか：この定期支払から記帳した仕訳（recId）、または同じ取引先（なければ同じ借方・貸方）の仕訳がその月度にある
@@ -46,7 +69,7 @@ export function monthStatus(recs, month, vouchers, today) {
   return recs.filter((r) => isDue(r, month)).map((r) => {
     const date = dueDate(r, month);
     const done = isDone(r, vouchers);
-    return { rec: r, date, done, overdue: !done && date < today };
+    return { rec: r, date, base: baseDate(r, month), reason: shiftReason(r, month), done, overdue: !done && date < today };
   }).sort((a, b) => a.date.localeCompare(b.date));
 }
 
@@ -109,7 +132,7 @@ export async function renderRecurring() {
     <td class="amt num">${r.mark === "◆" && r.usd ? `$${esc(r.usd)} ≒ ` : ""}${r.mark === "★" ? "約" : ""}${yen(r.amount || 0)}</td>
     <td class="num">${r.mark === "◇" ? esc(r.payMonth || "") + "月" : "毎月"}${esc(r.day)}日</td>
     <td>${esc(KIND_NAME[r.kind] || "固定費")}</td><td>${esc(nm(r.debitId))}</td><td>${esc(nm(r.creditId))}</td>
-    <td class="num">${esc((r.start || "") + (r.start || r.end ? "〜" : "") + (r.end || ""))}</td>
+    <td class="sub2">${esc(r.note || explainRule(r))}</td><td class="num">${esc((r.start || "") + (r.start || r.end ? "〜" : "") + (r.end || ""))}</td>
     <td><button type="button" class="sub" data-act="edit">修正</button> <button type="button" class="sub" data-act="end">${r.active === false || r.end ? "再開" : "終了"}</button></td></tr>`).join("");
   host.innerHTML = `
     <section class="panel">
@@ -120,8 +143,8 @@ export async function renderRecurring() {
         <button type="button" class="sub" id="rc-cand">過去の ☆★◇◆ の仕訳から候補を作る</button>
         <span class="count">固定費 月額 ¥${yen(t.fixedMonthly)}　＋　年払いの月割り ¥${yen(t.yearlyAvg)}${t.regular ? `　／　定期の支出 ¥${yen(t.regular)}` : ""}</span>
       </div>
-      <div class="tablewrap"><table class="tbl" style="min-width:0"><thead><tr><th>印</th><th>名前</th><th class="amt">金額</th><th>支払日</th><th>区分</th><th>借方</th><th>貸方（支払元）</th><th>期間</th><th></th></tr></thead>
-        <tbody id="rc-body">${rows || `<tr><td colspan="9" class="empty">まだ登録がありません。「過去の ☆★◇◆ の仕訳から候補を作る」で、いまの記帳から自動で拾えます。</td></tr>`}</tbody></table></div>
+      <div class="tablewrap"><table class="tbl" style="min-width:0"><thead><tr><th>印</th><th>名前</th><th class="amt">金額</th><th>支払日</th><th>区分</th><th>借方</th><th>貸方（支払元）</th><th>備考</th><th>期間</th><th></th></tr></thead>
+        <tbody id="rc-body">${rows || `<tr><td colspan="10" class="empty">まだ登録がありません。「過去の ☆★◇◆ の仕訳から候補を作る」で、いまの記帳から自動で拾えます。</td></tr>`}</tbody></table></div>
       <p class="note">★の金額は目安、◆はドル額と円の目安です。「終了」しても履歴は残ります。</p>
     </section>`;
   $("rc-add").addEventListener("click", () => openForm(null));
@@ -161,9 +184,12 @@ function openForm(r) {
       <label>取引先<select data-k="partyId">${partyOpts}</select></label>
       <label>税率<select data-k="tax">${[0, 8, 10].map((t) => `<option value="${t}"${Number(v.tax) === t ? " selected" : ""}>${t ? t + "%" : "ー"}</option>`).join("")}</select></label>
       <label>事業／生活<select data-k="biz"><option value="life"${v.biz !== "biz" ? " selected" : ""}>生活</option><option value="biz"${v.biz === "biz" ? " selected" : ""}>事業</option></select></label>
+      <label>休日の扱い<select data-k="holiday"><option value="next"${holidayRule(v) === "next" ? " selected" : ""}>土日祝・年末年始なら、次の平日にずらす</option><option value="prev"${holidayRule(v) === "prev" ? " selected" : ""}>土日祝・年末年始なら、前の平日にずらす</option><option value="none"${holidayRule(v) === "none" ? " selected" : ""}>ずらさない（そのままの日）</option></select></label>
       <label>区分<select data-k="kind"><option value="fixed"${v.kind !== "regular" ? " selected" : ""}>固定費（P/Lの経費）</option><option value="regular"${v.kind === "regular" ? " selected" : ""}>定期の支出（借入金返済・生活費支給など）</option></select></label>
       <label>開始月（空でもOK）<input type="month" data-k="start" value="${esc(v.start || "")}"></label>
       <label>終了月（空でもOK）<input type="month" data-k="end" value="${esc(v.end || "")}"></label>
+      <label style="grid-column:1/-1">備考（自由に書けます。空なら、ルールの説明が自動で出ます）
+        <span style="display:flex;gap:6px"><input type="text" data-k="note" value="${esc(v.note || "")}" style="flex:1"><button type="button" class="sub" id="rc-autonote">ルールから自動で入れる</button></span></label>
       <label style="grid-column:1/-1">摘要（空なら名前。{M/D} は支払日に置き換わります）<input type="text" data-k="memo" value="${esc(v.memo || "")}"></label>
     </div>
     <p class="note" id="rc-msg"></p>
@@ -178,6 +204,9 @@ function openForm(r) {
     q("amtnote").textContent = mk === "★" ? "（目安）" : mk === "◆" ? "（円の目安）" : "";
   };
   q("mark").addEventListener("change", sync); sync();
+  $("rc-autonote").addEventListener("click", () => {
+    q("note").value = explainRule({ mark: q("mark").value, day: q("day").value, payMonth: q("payMonth").value, holiday: q("holiday").value });
+  });
   $("rc-cancel").addEventListener("click", closeModal);
   if (!isNew) $("rc-del").addEventListener("click", async () => {
     if (!confirm(`「${v.name}」を削除します。記帳済みの仕訳は消えません。よろしいですか？（やめるときは「終了」にしてください）`)) return;
@@ -187,7 +216,7 @@ function openForm(r) {
     const data = {
       name: q("name").value.trim(), mark: q("mark").value, usd: q("usd").value.trim(), amount: parseAmount(q("amount").value),
       day: parseInt(q("day").value, 10), payMonth: parseInt(q("payMonth").value, 10), debitId: q("debitId").value, creditId: q("creditId").value,
-      fieldId: q("fieldId").value, partyId: q("partyId").value, tax: parseInt(q("tax").value, 10), biz: q("biz").value, kind: q("kind").value,
+      fieldId: q("fieldId").value, partyId: q("partyId").value, tax: parseInt(q("tax").value, 10), biz: q("biz").value, kind: q("kind").value, holiday: q("holiday").value, note: q("note").value.trim(),
       start: q("start").value, end: q("end").value, memo: q("memo").value.trim()
     };
     const err = !data.name ? "名前を入れてください。" : !(data.amount > 0) ? "金額（円）は1円以上で入れてください。" : !(data.day >= 1 && data.day <= 31) ? "支払日は1〜31で入れてください。"
@@ -255,9 +284,10 @@ export function renderRecBanner(el, onDraft) {
   el.className = "bkbanner rcbanner" + (over ? " warn" : "");
   el.innerHTML = `<details ${over ? "open" : ""}><summary><strong>${esc(state.month)}月度の定期支払</strong>　${todo.length ? `未記帳 ${todo.length}件${over ? `（うち支払日を過ぎたもの ${over}件）` : ""}` : "すべて記帳済み ✓"}　<span class="note">全${st.length}件</span></summary>
     <table class="tbl" style="min-width:0;margin-top:6px"><tbody>${st.map((s, i) => `<tr class="${s.done ? "done" : s.overdue ? "over" : ""}">
-      <td class="num">${esc(s.rec.mark || "")}</td><td>${esc(s.rec.name)}</td><td class="num">${md(s.date)}</td>
+      <td class="num">${esc(s.rec.mark || "")}</td><td>${esc(s.rec.name)}</td><td class="num">${md(s.date)}${s.reason ? `<span class="chg">${md(s.base)} ${esc(s.reason)}のため</span>` : ""}</td>
       <td class="amt num">${s.rec.mark === "★" || s.rec.mark === "◆" ? "約" : ""}${yen(s.rec.amount || 0)}</td>
       <td>${s.done ? "記帳済み ✓" : s.overdue ? `<span class="late-txt">支払日を過ぎています</span>` : "予定"}</td>
+      <td class="sub2">${esc(s.rec.note || explainRule(s.rec))}</td>
       <td>${s.done ? "" : `<button type="button" class="sub" data-i="${i}">記帳する</button>`}</td></tr>`).join("")}</tbody></table></details>`;
   el.querySelectorAll("button[data-i]").forEach((b) => b.addEventListener("click", () => {
     const s = st[Number(b.dataset.i)];

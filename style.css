@@ -343,6 +343,8 @@ details.lump summary { cursor: pointer; font-weight: bold; }
 .rcbanner table.tbl td { background: transparent; padding: 4px 10px; border-bottom: 1px solid rgba(0,0,0,.08); }
 .rcbanner tr.done td { color: #5f6672; }
 .rcbanner tr.over td { background: #ffe9c4; }
+.chg { display: inline-block; font-size: 11px; padding: 0 7px; border-radius: 9px; background: #fff0c2; color: #874607; margin-left: 6px; white-space: nowrap; }
+.sub2 { font-size: 12px; color: #5f6672; }
 .late-txt { color: #874607; font-weight: bold; }
 tr.off td { color: #8a8f99; background: #f3f1ec; }
 @media print { .rcbanner { display: none !important; } }
