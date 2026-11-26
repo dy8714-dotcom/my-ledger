@@ -1,17 +1,17 @@
 // 記帳画面（入力欄と仕訳の一覧）
-import { state, col, db, loadParties, loadVouchers, fetchMonthVouchers } from "./state.js?v=0.2I9c";
-import { downloadFullBackup } from "./backup.js?v=0.2I9c";
-import { renderDeprBanner, askDeprChange, afterDeprEdit } from "./assets.js?v=0.2I9c";
-import { printSelectedOnly } from "./print.js?v=0.2I9c";
-import { renderRecBanner } from "./recurring.js?v=0.2I9c";
-import { askClosedConfirm } from "./monthend.js?v=0.2I9c";
-import { isClosed } from "./state.js?v=0.2I9c";
+import { state, col, db, loadParties, loadVouchers, fetchMonthVouchers, loadRecurring } from "./state.js?v=0.2I10a";
+import { downloadFullBackup } from "./backup.js?v=0.2I10a";
+import { renderDeprBanner, askDeprChange, afterDeprEdit } from "./assets.js?v=0.2I10a";
+import { printSelectedOnly } from "./print.js?v=0.2I10a";
+import { renderRecBanner } from "./recurring.js?v=0.2I10a";
+import { askClosedConfirm } from "./monthend.js?v=0.2I10a";
+import { isClosed } from "./state.js?v=0.2I10a";
 import { $, esc, norm, hk, yen, parseAmount, WD, ymd, monthOf, shiftMonth, firstDayOf, accChip, openModal, closeModal }
-  from "./util.js?v=0.2I9c";
-import { createCombo } from "./combo.js?v=0.2I9c";
+  from "./util.js?v=0.2I10a";
+import { createCombo } from "./combo.js?v=0.2I10a";
 import { doc, setDoc, updateDoc, deleteDoc, writeBatch, serverTimestamp, increment, arrayUnion, deleteField }
   from "https://www.gstatic.com/firebasejs/13.4.0/firebase-firestore.js";
-import { patternsOf, sortPatterns, describePattern, addPattern, fromTemplate } from "./patterns.js?v=0.2I9c";
+import { patternsOf, sortPatterns, describePattern, addPattern, fromTemplate } from "./patterns.js?v=0.2I10a";
 
 // ---------- 候補の作り方 ----------
 const isBlank = (a) => a.name.startsWith("（") || a.name === "ー";
@@ -572,12 +572,28 @@ function mountVoucherForm(root, { voucher = null, onSaved, onCancel, onDeleted }
     $("pv-ok").focus();
   }
 
+  function askPriceChange(rec, total, anchorEl) {
+    return new Promise((resolve) => {
+      const box = document.createElement("div");
+      box.className = "askbox";
+      box.innerHTML = `<p><strong>価格改定ですか？</strong>「${esc(rec.name)}」は定額（☆）で ¥${yen(rec.amount)} と登録されていますが、今回は ¥${yen(total)} です。</p>
+        <p class="note">「価格改定」を選ぶと、登録額を ¥${yen(total)} に直します（来月からの下書きと月額の合計に反映）。</p>
+        <div class="actions"><button type="button" class="primary" data-c="update">価格改定（登録額も更新）</button><button type="button" class="sub" data-c="once">今回だけ違う</button><button type="button" class="sub" data-c="no">戻って直す</button></div>`;
+      anchorEl.insertAdjacentElement("afterend", box);
+      const done = (v) => { document.removeEventListener("keydown", onKey, true); box.remove(); resolve(v); };
+      const onKey = (e) => { if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); done(false); } };
+      document.addEventListener("keydown", onKey, true);
+      box.addEventListener("click", (e) => { const b = e.target.closest("button[data-c]"); if (b) done(b.dataset.c === "no" ? false : b.dataset.c); });
+      box.querySelector('[data-c="no"]').focus();
+    });
+  }
+
   function askEmptyConfirm(miss, anchorEl) {
     return new Promise((resolve) => {
       const box = document.createElement("div");
       box.className = "askbox";
       box.innerHTML = `<p><strong>${miss.join("・")}が空のままです。</strong>このまま登録しますか？</p>
-        ${miss.includes("取引先") ? `<p class="note">売掛金・仮払金・未払費用・借入金は、取引先ごとの残高（貸借内訳）に使うので、入れておくのがおすすめです。</p>` : ""}
+        ${miss.includes("取引先") && !miss.includes("摘要") ? `<p class="note">取引先を入れておくと、元帳の検索や、取引先ごとの残高（貸借内訳）で使えます。</p>` : ""}
         <div class="actions"><button type="button" class="primary" data-c="no">戻って入力</button><button type="button" class="sub" data-c="yes">このまま登録</button></div>`;
       anchorEl.insertAdjacentElement("afterend", box);
       const done = (v) => { document.removeEventListener("keydown", onKey, true); box.remove(); resolve(v); };
@@ -601,15 +617,34 @@ function mountVoucherForm(root, { voucher = null, onSaved, onCancel, onDeleted }
     const fv = field.getValue().id || "";
     // 空欄の確認：分野が空、または 売掛金・仮払金・未払費用・借入金 があるのに取引先が空のとき
     {
-      const tracked = lines.some((l) => { const a = state.accountsById[l.accId]; return a && [20, 22, 41, 45].includes(a.no); });
+      const kinds = lines.map((l) => state.accountsById[l.accId]).filter(Boolean);
+      const tracked = kinds.some((a) => [20, 22, 41, 45].includes(a.no));
+      const hasPL = kinds.some((a) => a.kind === "revenue" || a.kind === "expense");
       const miss = [];
       if (!fv) miss.push("分野");
-      if (tracked && !pv.id && !pv.newName) miss.push("取引先");
+      // 収益・経費がある取引や、取引先ごとに残高を見る科目がある取引は、取引先と摘要も確認する（現金と銀行の移動などは対象外）
+      if ((tracked || hasPL) && !pv.id && !pv.newName) miss.push("取引先");
+      if ((tracked || hasPL) && !lines.some((l) => (l.memo || "").trim())) miss.push("摘要");
       if (miss.length) {
         saveBtn.disabled = true;
         const go = await askEmptyConfirm(miss, saveBtn.parentElement);
         saveBtn.disabled = false;
         if (!go) return;
+      }
+    }
+    // ☆（定額）なのに登録額と違う金額なら、価格改定かどうかをたずねる（新規の記帳だけ）
+    let priceRec = null, priceUpdate = false;
+    if (!isEdit && markEl.value === "☆") {
+      const recs = state.recurring || [];
+      const rec = (draftRecId && recs.find((r) => r.id === draftRecId)) ||
+        (pv.id ? recs.find((r) => r.mark === "☆" && r.partyId === pv.id && r.active !== false) : null);
+      const total = lines.filter((l) => l.side === "debit").reduce((x, l) => x + l.amount, 0);
+      if (rec && rec.mark === "☆" && rec.amount && total !== rec.amount) {
+        saveBtn.disabled = true;
+        const ans = await askPriceChange(rec, total, saveBtn.parentElement);
+        saveBtn.disabled = false;
+        if (!ans) return;
+        priceRec = rec; priceUpdate = ans === "update";
       }
     }
     // 締め済みの月に記帳・修正するときは確認する
@@ -664,6 +699,11 @@ function mountVoucherForm(root, { voucher = null, onSaved, onCancel, onDeleted }
       else { id = "v_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 5); data.createdAt = serverTimestamp(); }
       await setDoc(doc(col("vouchers"), id), data, { merge: true });
       if (deprMode) await afterDeprEdit(voucher, newDebit, deprMode);
+      if (priceRec && priceUpdate) {
+        const nv = lines.filter((l) => l.side === "debit").reduce((x, l) => x + l.amount, 0);
+        await setDoc(doc(col("recurring"), priceRec.id), { amount: nv, updatedAt: serverTimestamp() }, { merge: true });
+        await loadRecurring();
+      }
       const remember = !!(partyId && !rememberWrap.hidden && rememberEl.checked);
       if (partyId) {
         const upd = { lastUsed: date };

@@ -1,10 +1,10 @@
 // 年間の表（I9b）：1月〜12月を横に並べた P/L・試算表（損益）・C/F。印刷は横向き
-import { state, loadAllVouchers } from "./state.js?v=0.2I9c";
-import { $, esc, yen, showError } from "./util.js?v=0.2I9c";
-import { CATEGORIES } from "./seed.js?v=0.2I9c";
-import { computeTrial } from "./trial.js?v=0.2I9c";
-import { plCalc, bsAt, ASSET_CATS, LIAB_CATS } from "./statements.js?v=0.2I9c";
-import { computeCF, CF_ROWS, cashBalance } from "./cashflow.js?v=0.2I9c";
+import { state, loadAllVouchers } from "./state.js?v=0.2I10a";
+import { $, esc, yen, showError } from "./util.js?v=0.2I10a";
+import { CATEGORIES } from "./seed.js?v=0.2I10a";
+import { computeTrial } from "./trial.js?v=0.2I10a";
+import { plCalc, bsAt, ASSET_CATS, LIAB_CATS } from "./statements.js?v=0.2I10a";
+import { computeCF, CF_ROWS, cashBalance } from "./cashflow.js?v=0.2I10a";
 
 const STAGES = [
   [1, "Ⅰ 事業"], [2, "Ⅱ 給与・その他の収入"], [3, "Ⅲ 税金・社会保険"], [4, "Ⅳ 生活費"], [5, "Ⅴ 評価・特別損益"]
