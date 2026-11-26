@@ -326,11 +326,12 @@ details.lump summary { cursor: pointer; font-weight: bold; }
 
 @media print {
   /* B/S：資産と負債・純資産の下端をそろえ、純資産は右の下に置く（A4 1枚いっぱい） */
-  #view[data-tab="bs"] .stgrid { height: 205mm; align-items: stretch; }
+  #view[data-tab="bs"] .stgrid { height: calc(100vh - 50mm); align-items: stretch; }
   #view[data-tab="bs"] .stgrid > section { display: flex; flex-direction: column; margin: 0; }
   #view[data-tab="bs"] .stgrid .tablewrap { flex: 1; display: flex; flex-direction: column; }
   #view[data-tab="bs"] .stgrid .tbl { font-size: 10.5px; }
   #view[data-tab="bs"] .stgrid section:first-child .tbl { flex: 1; }
   #view[data-tab="bs"] .stgrid .tbl.eq { margin-top: auto; }
   #view[data-tab="bs"] .tbl td { padding: 2px 4px; }
+  #view[data-tab="pl"] .tbl.st { height: calc(100vh - 42mm); }
 }
