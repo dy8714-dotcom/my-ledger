@@ -1,9 +1,9 @@
 // 定期支払（I7a）：☆定額・★変動・◇年払い・◆外貨 の登録と、記帳画面の「未記帳のお知らせ」
-import { state, col, db, loadRecurring, loadAllVouchers } from "./state.js?v=0.2I10b";
-import { $, esc, hk, yen, parseAmount, ymd, openModal, closeModal, showError } from "./util.js?v=0.2I10b";
+import { state, col, db, loadRecurring, loadAllVouchers } from "./state.js?v=0.2I10c";
+import { $, esc, hk, yen, parseAmount, ymd, openModal, closeModal, showError } from "./util.js?v=0.2I10c";
 import { doc, setDoc, deleteDoc, writeBatch, serverTimestamp } from "https://www.gstatic.com/firebasejs/13.4.0/firebase-firestore.js";
-import { fromTemplate } from "./patterns.js?v=0.2I10b";
-import { offReason, shiftBusiness } from "./holidays.js?v=0.2I10b";
+import { fromTemplate } from "./patterns.js?v=0.2I10c";
+import { offReason, shiftBusiness } from "./holidays.js?v=0.2I10c";
 
 export const MARKS = ["☆", "★", "◇", "◆"];
 const MARK_NAME = { "☆": "定額・毎月", "★": "金額が変わる・毎月", "◇": "年払い", "◆": "外貨建て・毎月" };
@@ -53,16 +53,54 @@ export function explainRule(rec) {
 }
 
 // 記帳済みか：この定期支払から記帳した仕訳（recId）、または同じ取引先（なければ同じ借方・貸方）の仕訳がその月度にある
+// この仕訳は、その定期支払のものか（recId、なければ 取引先＋印、取引先がなければ 借方・貸方＋印）
+export function matchesRec(rec, v) {
+  if (v.deleted) return false;
+  if (v.recId === rec.id) return true;
+  if (v.recId) return false;
+  if (rec.partyId) return v.partyId === rec.partyId && (!rec.mark || v.mark === rec.mark || !v.mark);
+  const dl = (v.lines || []).some((l) => l.side === "debit" && l.accId === rec.debitId);
+  const cl = (v.lines || []).some((l) => l.side === "credit" && l.accId === rec.creditId);
+  return dl && cl && (!rec.mark || v.mark === rec.mark);
+}
+
 export function isDone(rec, vouchers) {
-  return vouchers.some((v) => {
-    if (v.deleted) return false;
-    if (v.recId === rec.id) return true;
-    if (v.recId) return false;
-    if (rec.partyId) return v.partyId === rec.partyId && (!rec.mark || v.mark === rec.mark || !v.mark);
-    const dl = (v.lines || []).some((l) => l.side === "debit" && l.accId === rec.debitId);
-    const cl = (v.lines || []).some((l) => l.side === "credit" && l.accId === rec.creditId);
-    return dl && cl && (!rec.mark || v.mark === rec.mark);
+  return vouchers.some((v) => matchesRec(rec, v));
+}
+
+// ---------- 見積もり（最低ライン／直近実績／見込み／年間換算）。固定費だけ ----------
+// span: "12" | "6" | "all"。todayM: "26.11" の形（今月度）
+export function computeEstimate(recs, vouchers, span, todayM) {
+  const mi = (m) => { const [y, mm] = m.split(".").map((x) => parseInt(x, 10)); return y * 12 + mm - 1; };
+  const cutoff = span === "all" ? -Infinity : mi(todayM) - (parseInt(span, 10) - 1);
+  const rows = [];
+  recs.filter((r) => r.active !== false && !r.end && r.kind !== "regular").forEach((r) => {
+    const base = Number(r.amount) || 0;
+    const hist = vouchers.filter((v) => matchesRec(r, v)).map((v) => ({
+      m: v.month, date: v.date || "", amt: (v.lines || []).filter((l) => l.side === "debit").reduce((x, l) => x + l.amount, 0)
+    })).filter((h) => h.amt > 0).sort((a, b) => a.date.localeCompare(b.date));
+    const win = hist.filter((h) => mi(h.m) >= cutoff);
+    const last = hist.length ? hist[hist.length - 1] : null;
+    let min, latest, avg, year;
+    if (r.mark === "◇") {
+      min = null;
+      latest = Math.round((last ? last.amt : base) / 12);
+      avg = Math.round(base / 12);
+      year = base;
+    } else if (r.mark === "☆") {
+      min = base; latest = last ? last.amt : base; avg = base; year = base * 12;
+    } else {
+      const a = win.map((h) => h.amt);
+      min = a.length ? Math.min(...a) : base;
+      avg = a.length ? Math.round(a.reduce((x, y) => x + y, 0) / a.length) : base;
+      latest = last ? last.amt : base;
+      year = avg * 12;
+    }
+    rows.push({ rec: r, min, latest, avg, year, lastMonth: last ? last.m : "", noHist: !hist.length, range: r.mark !== "☆" && r.mark !== "◇" && win.length ? [Math.min(...win.map((h) => h.amt)), Math.max(...win.map((h) => h.amt))] : null });
   });
+  const sum = (f) => rows.reduce((x, r) => x + (f(r) || 0), 0);
+  const months = rows.map((r) => r.lastMonth).filter(Boolean).sort((a, b) => mi(a) - mi(b));
+  return { rows, min: sum((r) => r.min), latest: sum((r) => r.latest), avg: sum((r) => r.avg), year: sum((r) => r.year), latestMonth: months.length ? months[months.length - 1] : "" };
 }
 
 export function monthStatus(recs, month, vouchers, today) {
@@ -123,9 +161,37 @@ const accOpts = (sel, filter) => `<option value="">選んでください</option
 const nm = (id) => { const a = state.accountsById[id]; return a ? `${a.no} ${a.name}` : "？"; };
 const partyName = (id) => { const p = state.partiesById[id]; return p ? hk(p.name) : ""; };
 
+function estimateHtml(est, span) {
+  const d = est.latest - est.avg;
+  const mn = est.latestMonth ? `${parseInt(est.latestMonth.split(".")[1], 10)}月分` : "実績なし";
+  const card = (cls, label, val, sub, strong) => `<div class="est-card ${cls}"><div class="est-l">${label}</div><div class="est-v">¥${yen(val)}</div><div class="est-s">${sub}</div></div>`;
+  const cells = (n) => (n === null ? `<span class="muted">―</span>` : yen(n));
+  const rows = est.rows.map((r) => `<tr><td class="num">${esc(r.rec.mark || "")}</td>
+    <td>${esc(r.rec.name)}${r.range ? ` <span class="est-rng">（${yen(r.range[0])}〜${yen(r.range[1])}）</span>` : ""}${r.rec.mark === "◇" ? ` <span class="est-rng">（年${yen(r.rec.amount || 0)}）</span>` : ""}${r.noHist ? ` <span class="est-rng">（目安）</span>` : ""}</td>
+    <td class="amt num">${cells(r.min)}</td><td class="amt num">${yen(r.latest)}</td><td class="amt num">${yen(r.avg)}</td><td class="amt num">${yen(r.year)}</td></tr>`).join("");
+  return `<section class="panel" id="est-panel">
+    <h3><span class="bar"></span>定期支払の見積もり <span class="note" style="font-weight:400">固定費だけ（借入返済などの「定期の支出」は含めません）</span></h3>
+    <div class="toolbar"><span class="note">★の実績：</span>
+      <select id="est-span">${[["12", "直近12か月"], ["6", "直近6か月"], ["all", "全期間"]].map(([k, n]) => `<option value="${k}" ${span === k ? "selected" : ""}>${n}</option>`).join("")}</select></div>
+    ${est.rows.length ? `<div class="estgrid">
+      ${card("", "最低ライン（月）", est.min, "☆ ＋ ★の過去最低")}
+      ${card("", `直近実績（${mn}）`, est.latest, `見込みより ${d >= 0 ? "+" : "-"}${yen(Math.abs(d))}`)}
+      ${card("main", "見込み（月）", est.avg, "☆ ＋ ★の平均 ＋ ◇の月割り")}
+      ${card("", "年間換算", est.year, "見込み × 12（◇は年額）")}
+    </div>
+    <div class="tablewrap"><table class="tbl mtbl"><thead><tr><th>印</th><th>名前</th><th class="amt">最低ライン</th><th class="amt">直近実績</th><th class="amt">見込み</th><th class="amt">年間換算</th></tr></thead>
+      <tbody>${rows}<tr class="tot"><td></td><td>合計</td><td class="amt num">${yen(est.min)}</td><td class="amt num">${yen(est.latest)}</td><td class="amt num">${yen(est.avg)}</td><td class="amt num">${yen(est.year)}</td></tr></tbody></table></div>
+    <p class="note">直近実績は、記帳済みの最新の月の金額です（◇は年額の月割り）。★の（　）は実績の最低〜最高。実績がまだ無いものは、登録してある目安の金額を使います。</p>` : `<p class="note">固定費の定期支払を登録すると、ここに見積もりが出ます。</p>`}
+  </section>`;
+}
+
 export async function renderRecurring() {
   const host = $("settings-body");
   const recs = state.recurring;
+  let allV = [];
+  try { allV = await loadAllVouchers(); } catch (err) { console.error("[見積もり]", err); }
+  const span = state.recSpan || "12";
+  const est = computeEstimate(recs, allV, span, state.month);
   const t = monthlyTotals(recs);
   const rows = recs.map((r) => `<tr data-id="${esc(r.id)}" class="${r.active === false || r.end ? "off" : ""}">
     <td class="num">${esc(r.mark || "")}</td><td>${esc(r.name)}</td>
@@ -134,7 +200,7 @@ export async function renderRecurring() {
     <td>${esc(KIND_NAME[r.kind] || "固定費")}</td><td>${esc(nm(r.debitId))}</td><td>${esc(nm(r.creditId))}</td>
     <td class="sub2">${esc(r.note || explainRule(r))}</td><td class="num">${esc((r.start || "") + (r.start || r.end ? "〜" : "") + (r.end || ""))}</td>
     <td><button type="button" class="sub" data-act="edit">修正</button> <button type="button" class="sub" data-act="end">${r.active === false || r.end ? "再開" : "終了"}</button></td></tr>`).join("");
-  host.innerHTML = `
+  host.innerHTML = estimateHtml(est, span) + `
     <section class="panel">
       <h3><span class="bar"></span>定期支払</h3>
       <p class="note">毎月（または毎年）決まって払うものを登録します。記帳画面に「今月の定期支払」が出て、支払日を過ぎても記帳していないものを知らせます。記帳のボタンを押すと、入力欄に内容が入るので、金額を確かめて登録してください（勝手には登録されません）。</p>
@@ -147,6 +213,7 @@ export async function renderRecurring() {
         <tbody id="rc-body">${rows || `<tr><td colspan="10" class="empty">まだ登録がありません。「過去の ☆★◇◆ の仕訳から候補を作る」で、いまの記帳から自動で拾えます。</td></tr>`}</tbody></table></div>
       <p class="note">★の金額は目安、◆はドル額と円の目安です。「終了」しても履歴は残ります。</p>
     </section>`;
+  $("est-span").addEventListener("change", (e) => { state.recSpan = e.target.value; renderRecurring(); });
   $("rc-add").addEventListener("click", () => openForm(null));
   $("rc-cand").addEventListener("click", openCandidates);
   $("rc-body").addEventListener("click", async (e) => {

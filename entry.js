@@ -1,17 +1,17 @@
 // 記帳画面（入力欄と仕訳の一覧）
-import { state, col, db, loadParties, loadVouchers, fetchMonthVouchers, loadRecurring } from "./state.js?v=0.2I10b";
-import { downloadFullBackup } from "./backup.js?v=0.2I10b";
-import { renderDeprBanner, askDeprChange, afterDeprEdit } from "./assets.js?v=0.2I10b";
-import { printSelectedOnly } from "./print.js?v=0.2I10b";
-import { renderRecBanner } from "./recurring.js?v=0.2I10b";
-import { askClosedConfirm } from "./monthend.js?v=0.2I10b";
-import { isClosed } from "./state.js?v=0.2I10b";
+import { state, col, db, loadParties, loadVouchers, fetchMonthVouchers, loadRecurring } from "./state.js?v=0.2I10c";
+import { downloadFullBackup } from "./backup.js?v=0.2I10c";
+import { renderDeprBanner, askDeprChange, afterDeprEdit } from "./assets.js?v=0.2I10c";
+import { printSelectedOnly } from "./print.js?v=0.2I10c";
+import { renderRecBanner } from "./recurring.js?v=0.2I10c";
+import { askClosedConfirm } from "./monthend.js?v=0.2I10c";
+import { isClosed } from "./state.js?v=0.2I10c";
 import { $, esc, norm, hk, yen, parseAmount, WD, ymd, monthOf, shiftMonth, firstDayOf, accChip, openModal, closeModal }
-  from "./util.js?v=0.2I10b";
-import { createCombo } from "./combo.js?v=0.2I10b";
+  from "./util.js?v=0.2I10c";
+import { createCombo } from "./combo.js?v=0.2I10c";
 import { doc, setDoc, updateDoc, deleteDoc, writeBatch, serverTimestamp, increment, arrayUnion, deleteField }
   from "https://www.gstatic.com/firebasejs/13.4.0/firebase-firestore.js";
-import { patternsOf, sortPatterns, describePattern, addPattern, fromTemplate } from "./patterns.js?v=0.2I10b";
+import { patternsOf, sortPatterns, describePattern, addPattern, fromTemplate } from "./patterns.js?v=0.2I10c";
 
 // ---------- 候補の作り方 ----------
 const isBlank = (a) => a.name.startsWith("（") || a.name === "ー";

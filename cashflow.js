@@ -1,7 +1,7 @@
 // C/F（キャッシュフロー）：CF計算書（営業・投資・財務）と、日別の資金の動き（I9a）
-import { state, loadAllVouchers } from "./state.js?v=0.2I10b";
-import { $, esc, yen, shiftMonth, showError } from "./util.js?v=0.2I10b";
-import { bsAt, compareMonth } from "./statements.js?v=0.2I10b";
+import { state, loadAllVouchers } from "./state.js?v=0.2I10c";
+import { $, esc, yen, shiftMonth, showError } from "./util.js?v=0.2I10c";
+import { bsAt, compareMonth } from "./statements.js?v=0.2I10c";
 
 const idxOf = (m) => { const [y, mm] = m.split(".").map((x) => parseInt(x, 10)); return y * 12 + (mm - 1); };
 const keyOf = (i) => String(Math.floor(i / 12)).padStart(2, "0") + "." + ((i % 12) + 1);
