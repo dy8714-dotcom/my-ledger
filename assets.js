@@ -1,6 +1,6 @@
 // 月割り償却（手順I2a）：資産の登録と予定表
-import { state, col, db, loadAssets, loadVouchers, fetchMonthVouchers, isClosed } from "./state.js?v=0.2I6e";
-import { $, esc, yen, ymd, openModal, closeModal, showError } from "./util.js?v=0.2I6e";
+import { state, col, db, loadAssets, loadVouchers, fetchMonthVouchers, isClosed } from "./state.js?v=0.2I6f";
+import { $, esc, yen, ymd, openModal, closeModal, showError } from "./util.js?v=0.2I6f";
 import { doc, addDoc, updateDoc, writeBatch, arrayUnion, serverTimestamp } from "https://www.gstatic.com/firebasejs/13.4.0/firebase-firestore.js";
 
 // ---------- 計算（画面に依存しない部分） ----------

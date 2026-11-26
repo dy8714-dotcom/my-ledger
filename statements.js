@@ -1,7 +1,7 @@
 // B/S（貸借対照表）と P/L（損益計算書）。月ごとに、前月・昨年の同じ月・好きな月と比べられる
-import { state, loadAllVouchers } from "./state.js?v=0.2I6e";
-import { $, esc, yen, accChip, shiftMonth, showError } from "./util.js?v=0.2I6e";
-import { computeTrial, equityParts } from "./trial.js?v=0.2I6e";
+import { state, loadAllVouchers } from "./state.js?v=0.2I6f";
+import { $, esc, yen, accChip, shiftMonth, showError } from "./util.js?v=0.2I6f";
+import { computeTrial, equityParts } from "./trial.js?v=0.2I6f";
 
 const idxOf = (m) => { const [y, mm] = m.split(".").map((x) => parseInt(x, 10)); return y * 12 + (mm - 1); };
 export const keyOf = (idx) => String(Math.floor(idx / 12)).padStart(2, "0") + "." + ((idx % 12) + 1);
@@ -162,7 +162,8 @@ function drawBS(list) {
   const inCat = (cat, kind) => accs.filter((a) => a.category === cat && a.kind === kind).sort((x, y) => x.no - y.no)
     .filter((a) => (c.bal[a.id] || 0) !== 0 || (p.bal[a.id] || 0) !== 0);
 
-  const head = `<thead><tr><th>科目</th><th class="r">${esc(labelOf(X))}末</th><th class="r">${esc(labelOf(Y))}末</th><th class="r">増減</th></tr></thead>`;
+  const cg = `<colgroup><col style="width:34%"><col style="width:22%"><col style="width:22%"><col style="width:22%"></colgroup>`;
+  const head = cg + `<thead><tr><th>科目</th><th class="r">${esc(labelOf(X))}末</th><th class="r">${esc(labelOf(Y))}末</th><th class="r">増減</th></tr></thead>`;
   const row = (a, sign) => {
     const cv = (c.bal[a.id] || 0) * sign, pv = (p.bal[a.id] || 0) * sign;
     return `<tr><td>${link(a.id, "20.1", keyOf(X), accChip(a))}</td><td class="r num">${num(cv)}</td><td class="r num muted2">${num(pv)}</td><td class="r num">${dif(cv - pv)}</td></tr>`;
@@ -185,11 +186,12 @@ function drawBS(list) {
     right += `<tr class="grp"><td colspan="4">${esc(cat)}</td></tr>` + rs.map((a) => row(a, 1)).join("") + subRow(cat + " 計", catSum(cat, "liability", 1, c), catSum(cat, "liability", 1, p));
   });
   right += subRow("負債 合計", c.L, p.L, "tot");
+  let eqPart = "";
   const eqAccs = accs.filter((a) => a.kind === "equity").sort((x, y) => x.no - y.no).filter((a) => (c.bal[a.id] || 0) !== 0 || (p.bal[a.id] || 0) !== 0);
-  right += `<tr class="grp"><td colspan="4">純資産</td></tr>` + eqAccs.map((a) => row(a, a.no === 91 ? -1 : 1)).join("") +
+  eqPart += `<tr class="grp"><td colspan="4">純資産</td></tr>` + eqAccs.map((a) => row(a, a.no === 91 ? -1 : 1)).join("") +
     subRow("前期までの損益（繰越）", c.prev, p.prev, "") + subRow("当期純損益（その年の1月〜）", c.cur, p.cur, "") +
     subRow("純資産 合計", c.eq, p.eq, "tot");
-  right += subRow("負債 ＋ 純資産 合計", c.L + c.eq, p.L + p.eq, "tot");
+  eqPart += subRow("負債 ＋ 純資産 合計", c.L + c.eq, p.L + p.eq, "tot");
 
   const okC = c.gap === 0, okP = p.gap === 0;
   const check = `<div class="${okC && okP ? "okbadge" : "warnbadge"}" id="bs-check">資産 − 負債 − 純資産：${esc(labelOf(X))}末 ${yen(c.gap)} ${okC ? "✓" : "✗"}　${esc(labelOf(Y))}末 ${yen(p.gap)} ${okP ? "✓" : "✗"}</div>`;
@@ -197,7 +199,7 @@ function drawBS(list) {
   $("view").innerHTML = bar("bs", st, X, Yk) + `<div class="note" style="margin:-4px 0 10px">${check}</div>
     <div class="stgrid">
       <section class="panel nopad"><div class="panel-head"><h3><span class="bar"></span>資産</h3></div><div class="tablewrap"><table class="tbl tb st">${head}<tbody>${left}</tbody></table></div></section>
-      <section class="panel nopad"><div class="panel-head"><h3><span class="bar"></span>負債と純資産</h3></div><div class="tablewrap"><table class="tbl tb st">${head}<tbody>${right}</tbody></table></div></section>
+      <section class="panel nopad"><div class="panel-head"><h3><span class="bar"></span>負債と純資産</h3></div><div class="tablewrap"><table class="tbl tb st">${head}<tbody>${right}</tbody></table><table class="tbl tb st eq">${cg}<tbody>${eqPart}</tbody></table></div></section>
     </div>`;
 
   wire("bs", list, () => drawBS(list), () => {

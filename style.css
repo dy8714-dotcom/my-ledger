@@ -256,6 +256,8 @@ details.lump summary { cursor: pointer; font-weight: bold; }
 
 /* B/S・P/L */
 .stgrid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; align-items: start; }
+.tbl.tb.st { table-layout: fixed; }
+.tbl.tb.st.eq { margin-top: 0; border-top: 0; }
 .tbl.tb.st th.r, .tbl.tb.st td.r { text-align: right; }
 .tbl.tb.st .muted2 { color: #5f6672; }
 .monthbar { flex-wrap: wrap; }
@@ -263,7 +265,7 @@ details.lump summary { cursor: pointer; font-weight: bold; }
 
 /* ===== 印刷（I6d） ===== */
 #printhead, #lg-ptable { display: none; }
-@page { size: A4 portrait; margin: 10mm; }
+@page { size: A4 portrait; margin: 15mm 12mm; }
 @media print {
   body { background: #fff; font-size: 11px; color: #000; }
   header, nav, .bkbanner, #modal, .listnav, .selbar, .monthbar button, .monthbar .seg, .monthbar input, .monthbar .spacer,
@@ -320,4 +322,15 @@ details.lump summary { cursor: pointer; font-weight: bold; }
   .lgsub .lgr > div { padding: 2px 6px; }
   .ptbl .wd { margin-left: 2px; font-size: 8px; }
   a.lk { color: inherit; }
+}
+
+@media print {
+  /* B/S：資産と負債・純資産の下端をそろえ、純資産は右の下に置く（A4 1枚いっぱい） */
+  #view[data-tab="bs"] .stgrid { height: 205mm; align-items: stretch; }
+  #view[data-tab="bs"] .stgrid > section { display: flex; flex-direction: column; margin: 0; }
+  #view[data-tab="bs"] .stgrid .tablewrap { flex: 1; display: flex; flex-direction: column; }
+  #view[data-tab="bs"] .stgrid .tbl { font-size: 10.5px; }
+  #view[data-tab="bs"] .stgrid section:first-child .tbl { flex: 1; }
+  #view[data-tab="bs"] .stgrid .tbl.eq { margin-top: auto; }
+  #view[data-tab="bs"] .tbl td { padding: 2px 4px; }
 }
