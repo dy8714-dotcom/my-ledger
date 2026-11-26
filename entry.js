@@ -1,16 +1,17 @@
 // 記帳画面（入力欄と仕訳の一覧）
-import { state, col, db, loadParties, loadVouchers, fetchMonthVouchers } from "./state.js?v=0.2I6g";
-import { downloadFullBackup } from "./backup.js?v=0.2I6g";
-import { renderDeprBanner, askDeprChange, afterDeprEdit } from "./assets.js?v=0.2I6g";
-import { printSelectedOnly } from "./print.js?v=0.2I6g";
-import { askClosedConfirm } from "./monthend.js?v=0.2I6g";
-import { isClosed } from "./state.js?v=0.2I6g";
+import { state, col, db, loadParties, loadVouchers, fetchMonthVouchers } from "./state.js?v=0.2I7a";
+import { downloadFullBackup } from "./backup.js?v=0.2I7a";
+import { renderDeprBanner, askDeprChange, afterDeprEdit } from "./assets.js?v=0.2I7a";
+import { printSelectedOnly } from "./print.js?v=0.2I7a";
+import { renderRecBanner } from "./recurring.js?v=0.2I7a";
+import { askClosedConfirm } from "./monthend.js?v=0.2I7a";
+import { isClosed } from "./state.js?v=0.2I7a";
 import { $, esc, norm, hk, yen, parseAmount, WD, ymd, monthOf, shiftMonth, firstDayOf, accChip, openModal, closeModal }
-  from "./util.js?v=0.2I6g";
-import { createCombo } from "./combo.js?v=0.2I6g";
+  from "./util.js?v=0.2I7a";
+import { createCombo } from "./combo.js?v=0.2I7a";
 import { doc, setDoc, updateDoc, deleteDoc, writeBatch, serverTimestamp, increment, arrayUnion, deleteField }
   from "https://www.gstatic.com/firebasejs/13.4.0/firebase-firestore.js";
-import { patternsOf, sortPatterns, describePattern, addPattern, fromTemplate } from "./patterns.js?v=0.2I6g";
+import { patternsOf, sortPatterns, describePattern, addPattern, fromTemplate } from "./patterns.js?v=0.2I7a";
 
 // ---------- 候補の作り方 ----------
 const isBlank = (a) => a.name.startsWith("（") || a.name === "ー";
@@ -95,8 +96,11 @@ function isSimple(v) {
 
 // ---------- 入力フォーム（上の入力欄と、修正の画面で共通） ----------
 // ふだんは「1行入力」。「＋行を追加」（Ctrl+↓）を押すと、複合仕訳の「行ごとの入力」に切り替わる。
+let entryApi = null; // 上の入力欄に、定期支払などの下書きを入れるための入口
+
 function mountVoucherForm(root, { voucher = null, onSaved, onCancel, onDeleted }) {
   const isEdit = !!voucher;
+  let draftRecId = null;
   root.innerHTML = `
     <div class="vgrid">
       <div class="in c2"><label>日付</label><input type="date" data-k="date"></div>
@@ -450,7 +454,26 @@ function mountVoucherForm(root, { voucher = null, onSaved, onCancel, onDeleted }
     refreshParty(party.getValue(), true);
   }
 
+  function fillDraft(d) {
+    leaveDetail();
+    autoMemo = null;
+    dateEl.value = d.date;
+    debit.setValue(d.debitId); credit.setValue(d.creditId);
+    if (d.fieldId && state.fieldsById[d.fieldId]) field.setValue(d.fieldId); else field.clear();
+    if (d.partyId && state.partiesById[d.partyId]) party.setValue(d.partyId); else party.clear();
+    memoEl.value = d.memo || ""; amountEl.value = d.amount ? String(d.amount) : ""; markEl.value = d.mark || "";
+    taxEl.value = String(d.tax || 0); taxTouched = true;
+    bizEl.value = d.biz === "biz" ? "biz" : "life"; bizAmtEl.value = ""; bizMemoEl.value = ""; bizTouched = true; updateBizUI();
+    draftRecId = d.recId || null;
+    updateSeq();
+    msg(d.recId ? "定期支払の下書きです。金額を確かめて「登録」を押してください。" : "");
+    root.scrollIntoView({ block: "start", behavior: "smooth" });
+    amountEl.focus(); amountEl.select();
+  }
+  if (!isEdit) entryApi = { fill: fillDraft };
+
   function resetForNext() {
+    draftRecId = null;
     leaveDetail();
     autoMemo = null;
     debit.clear(); credit.clear(); field.clear(); party.clear();
@@ -606,6 +629,7 @@ function mountVoucherForm(root, { voucher = null, onSaved, onCancel, onDeleted }
         fieldId: fv, partyId, mark: markEl.value, lines,
         updatedAt: serverTimestamp()
       };
+      if (!isEdit && draftRecId) data.recId = draftRecId;
       let id;
       if (isEdit) id = voucher.id;
       else { id = "v_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 5); data.createdAt = serverTimestamp(); }
@@ -685,6 +709,7 @@ export function renderEntry() {
   }
   v.innerHTML = `
     <div id="depr-banner" class="bkbanner" hidden></div>
+    <div id="rec-banner" class="bkbanner rcbanner" hidden></div>
     <div class="monthbar">
       <button type="button" class="navbtn" id="m-prev" aria-label="前の月度">◀</button>
       <h2 id="m-title"></h2>
@@ -1123,6 +1148,7 @@ function drawList() {
   $("vbody").innerHTML = html;
   drawJumpOptions(list);
   drawSelBar();
+  renderRecBanner($("rec-banner"), (d) => { if (entryApi) entryApi.fill(d); });
   let dt = 0, ct = 0;
   state.vouchers.forEach((vo) => vo.lines.forEach((l) => { if (l.side === "debit") dt += l.amount; else ct += l.amount; }));
   $("totals").innerHTML = `<span class="note">この月度の借方合計 ¥${yen(dt)}／貸方合計 ¥${yen(ct)}</span>

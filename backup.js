@@ -1,6 +1,6 @@
 // バックアップ（手順G）：全データのJSON、仕訳のCSV
-import { state, col, db, loadAll, loadVouchers, loadAllVouchers } from "./state.js?v=0.2I6g";
-import { $, esc, ymd, showError, openModal, closeModal } from "./util.js?v=0.2I6g";
+import { state, col, db, loadAll, loadVouchers, loadAllVouchers } from "./state.js?v=0.2I7a";
+import { $, esc, ymd, showError, openModal, closeModal } from "./util.js?v=0.2I7a";
 import { collection, getDocs, getDoc, setDoc, deleteDoc, writeBatch, doc } from "https://www.gstatic.com/firebasejs/13.4.0/firebase-firestore.js";
 
 export function saveFile(text, filename, mime, bom) {
@@ -25,7 +25,7 @@ function plain(v) {
 
 export async function dumpAll() {
   const out = { app: "my-ledger", format: 1, exportedAt: new Date().toISOString(), uid: state.user.uid };
-  for (const name of ["accounts", "fields", "parties", "vouchers", "assets", "valuations", "closings"]) {
+  for (const name of ["accounts", "fields", "parties", "vouchers", "assets", "valuations", "closings", "recurring"]) {
     const snap = await getDocs(col(name));
     out[name] = snap.docs.map((d) => ({ id: d.id, ...plain(d.data()) }));
   }
@@ -96,7 +96,7 @@ function voucherCsv(list) {
 
 // ---------- Firestore内の控え（I5a） ----------
 // 全データを、Firestoreの中の別の場所（backups）にも保存しておく。1文書は約1MBまでなので、小分けにして入れる
-const COPY_COLLS = ["accounts", "fields", "parties", "vouchers", "assets", "valuations", "closings"];
+const COPY_COLLS = ["accounts", "fields", "parties", "vouchers", "assets", "valuations", "closings", "recurring"];
 const PART_BYTES = 500000;
 const KEEP_COPIES = 20;
 const byteLen = (s) => new TextEncoder().encode(s).length;

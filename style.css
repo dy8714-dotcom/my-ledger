@@ -335,3 +335,14 @@ details.lump summary { cursor: pointer; font-weight: bold; }
   #view[data-tab="bs"] .tbl td { padding: 2px 4px; }
   #view[data-tab="pl"] .tbl.st { height: calc(100vh - 42mm); }
 }
+
+/* 定期支払（I7a） */
+.rcbanner { text-align: left; justify-content: flex-start; background: #eef3ff; border-bottom: 1px solid #b9c9ee; }
+.rcbanner.warn { background: #fff4d6; border-bottom-color: #e0c060; }
+.rcbanner summary { cursor: pointer; }
+.rcbanner table.tbl td { background: transparent; padding: 4px 10px; border-bottom: 1px solid rgba(0,0,0,.08); }
+.rcbanner tr.done td { color: #5f6672; }
+.rcbanner tr.over td { background: #ffe9c4; }
+.late-txt { color: #874607; font-weight: bold; }
+tr.off td { color: #8a8f99; background: #f3f1ec; }
+@media print { .rcbanner { display: none !important; } }
