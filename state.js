@@ -46,6 +46,7 @@ export const state = {
   lg: null,
   savedSearches: null,
   lastBackupAt: null,
+  lastDriveAt: null,
   backupSnoozed: false,
   st: { month: null, cmp: "prev", cmpMonth: null, scope: "all" },
   tb: { month: null, mode: "month", from: null, to: null, hideZero: true, byNo: false, scope: "all" }
@@ -92,6 +93,7 @@ export async function loadBackupInfo() {
   try {
     const snap = await getDoc(doc(col("meta"), "backup"));
     state.lastBackupAt = snap.exists() ? snap.data().lastAt || null : null;
+    state.lastDriveAt = snap.exists() ? snap.data().driveAt || null : null;
   } catch (err) { state.lastBackupAt = null; }
 }
 

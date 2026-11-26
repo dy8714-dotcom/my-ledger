@@ -1,7 +1,8 @@
 // バックアップ（手順G）：全データのJSON、仕訳のCSV
-import { state, col, db, loadAll, loadVouchers, loadAllVouchers } from "./state.js?v=0.2I7b";
-import { $, esc, ymd, showError, openModal, closeModal } from "./util.js?v=0.2I7b";
+import { state, col, db, loadAll, loadVouchers, loadAllVouchers } from "./state.js?v=0.2I7c";
+import { $, esc, ymd, showError, openModal, closeModal } from "./util.js?v=0.2I7c";
 import { collection, getDocs, getDoc, setDoc, deleteDoc, writeBatch, doc } from "https://www.gstatic.com/firebasejs/13.4.0/firebase-firestore.js";
+import { requestToken, saveToDrive, KEEP_FILES } from "./drive.js?v=0.2I7c";
 
 export function saveFile(text, filename, mime, bom) {
   const blob = new Blob([(bom ? "﻿" : "") + text], { type: mime });
@@ -55,6 +56,19 @@ export async function downloadFullBackup(prefix = "my-ledger-backup") {
   return data;
 }
 
+// 全データをGoogleドライブに保存する（ボタンを押した直後に呼ぶ。最初に「許可」の画面が出る）
+export async function saveBackupToDrive(prefix = "my-ledger-backup") {
+  const token = await requestToken();
+  let data = null;
+  const r = await saveToDrive(token, `${prefix}-${stampNow()}.json`, async () => { data = await dumpAll(); return JSON.stringify(data, null, 1); });
+  try {
+    state.lastBackupAt = Date.now(); state.lastDriveAt = state.lastBackupAt;
+    await setDoc(doc(col("meta"), "backup"), { lastAt: state.lastBackupAt, driveAt: state.lastDriveAt }, { merge: true });
+  } catch (err) { console.error("[バックアップ] 日時の記録に失敗", err); }
+  renderBackupBanner();
+  return { ...r, data };
+}
+
 export function renderBackupBanner() {
   const el = $("backup-banner");
   if (!el) return;
@@ -63,9 +77,18 @@ export function renderBackupBanner() {
   if (!state.user || state.backupSnoozed || (last && days < BACKUP_DAYS)) { el.hidden = true; return; }
   el.hidden = false;
   el.innerHTML = `<span>${last ? `最後のバックアップから<strong>${days}日</strong>たっています。` : "バックアップを保存した記録がまだありません。"}</span>
-    <button type="button" class="primary" id="bk-now">今すぐ保存（PCにダウンロード）</button>
+    <button type="button" class="primary" id="bk-drive">Googleドライブに保存</button>
+    <button type="button" class="sub" id="bk-now">PCにダウンロード</button>
     <button type="button" class="sub" id="bk-later">あとで</button><span id="bk-msg" class="note"></span>`;
   $("bk-later").addEventListener("click", () => { state.backupSnoozed = true; el.hidden = true; });
+  $("bk-drive").addEventListener("click", async () => {
+    $("bk-drive").disabled = true; $("bk-msg").textContent = "Googleの許可の画面を確認してください…";
+    try {
+      const r = await saveBackupToDrive();
+      el.hidden = false;
+      el.innerHTML = `<span>ドライブに保存しました（${esc(r.name)}）。</span> <a href="${esc(r.folderUrl)}" target="_blank" rel="noopener">ドライブのフォルダを開く</a>`;
+    } catch (err) { $("bk-drive").disabled = false; $("bk-msg").textContent = ""; showError("ドライブへの保存に失敗しました：" + err.message); }
+  });
   $("bk-now").addEventListener("click", async () => {
     $("bk-now").disabled = true; $("bk-msg").textContent = "保存中…";
     try { await downloadFullBackup(); }
@@ -203,6 +226,10 @@ export function renderBackup() {
     <div class="card" style="max-width:720px">
       <h3>バックアップ</h3>
       <p class="note">データはFirebase（クラウド）に保存されています。念のため、定期的に自分のPCにも保存しておくと安心です。</p>
+      <h4>Googleドライブに保存（おすすめ）</h4>
+      <p class="note">全データのJSONを、あなたのGoogleドライブの「マイ帳簿バックアップ」フォルダに保存します。パソコンやFirebaseに何かあっても、ここから戻せます。押すと、Googleの「許可」の小さな画面が出ます（このサイトが作ったファイルだけを扱う権限です）。新しい${KEEP_FILES}件を残し、それより古いものはごみ箱に移します。</p>
+      <p class="note" id="bk-drive-last"></p>
+      <p><button type="button" class="primary" id="bk-drive-go">Googleドライブに保存</button> <span id="bk-drive-msg" class="note"></span></p>
       <h4>① 全データをPCにダウンロード（JSON）</h4>
       <p class="note">科目・分野・取引先・仕訳・入力パターン・保存した検索を、すべて1つのファイルにまとめます。復元（読み込み）は手順H以降で作ります。</p>
       <p class="note" id="bk-last"></p>
@@ -222,6 +249,20 @@ export function renderBackup() {
     $("bk-last").textContent = l ? `最後に保存：${ymd(new Date(l))}（${Math.floor((Date.now() - l) / DAY)}日前）。${BACKUP_DAYS}日たつと、画面の上にお知らせが出ます。` : `最後に保存した記録はまだありません。`;
   };
   drawLast();
+  const drawDrive = () => {
+    const l = state.lastDriveAt;
+    $("bk-drive-last").textContent = l ? `ドライブへの最後の保存：${ymd(new Date(l))}（${Math.floor((Date.now() - l) / DAY)}日前）` : "ドライブに保存した記録は、まだありません。";
+  };
+  drawDrive();
+  $("bk-drive-go").addEventListener("click", async () => {
+    $("bk-drive-go").disabled = true; $("bk-drive-msg").textContent = "Googleの許可の画面を確認してください…";
+    try {
+      const r = await saveBackupToDrive();
+      drawLast(); drawDrive();
+      $("bk-drive-msg").innerHTML = `保存しました（${esc(r.name)}${r.trimmed ? `／古い${r.trimmed}件をごみ箱へ` : ""}）。<a href="${esc(r.folderUrl)}" target="_blank" rel="noopener">ドライブのフォルダを開く</a>`;
+    } catch (err) { $("bk-drive-msg").textContent = ""; showError("ドライブへの保存に失敗しました：" + err.message); }
+    $("bk-drive-go").disabled = false;
+  });
 
   $("bk-json").addEventListener("click", async () => {
     $("bk-json-msg").textContent = "読み込み中…";

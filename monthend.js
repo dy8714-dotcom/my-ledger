@@ -1,8 +1,8 @@
 // 月末（手順I3）：金融資産の評価替え
-import { state, col, db, loadAllVouchers, loadVouchers, fetchMonthVouchers, loadClosings, isClosed, loadAssets } from "./state.js?v=0.2I7b";
-import { pendingDrafts } from "./assets.js?v=0.2I7b";
-import { downloadFullBackup, makeCopy } from "./backup.js?v=0.2I7b";
-import { $, esc, yen, ymd, hk, shiftMonth, monthOf, WD, showError } from "./util.js?v=0.2I7b";
+import { state, col, db, loadAllVouchers, loadVouchers, fetchMonthVouchers, loadClosings, isClosed, loadAssets } from "./state.js?v=0.2I7c";
+import { pendingDrafts } from "./assets.js?v=0.2I7c";
+import { downloadFullBackup, makeCopy, saveBackupToDrive } from "./backup.js?v=0.2I7c";
+import { $, esc, yen, ymd, hk, shiftMonth, monthOf, WD, showError } from "./util.js?v=0.2I7c";
 import { doc, getDocs, writeBatch, setDoc, deleteField, serverTimestamp, arrayUnion } from "https://www.gstatic.com/firebasejs/13.4.0/firebase-firestore.js";
 
 const EVAL_NOS = [26, 27, 28, 29, 30]; // 評価替えの対象（金融資産）
@@ -263,8 +263,8 @@ async function renderClose(view) {
         <tr><td>${mark(okNeg)}</td><td>現金・預金・電子マネーがマイナスになっていない</td><td class="note">${okNeg ? "マイナスの科目なし" : `月末にマイナス：${negCash.map((a) => esc(a.no + a.name) + " ¥" + yen(now[a.id])).join("、")}（チャージなどの記帳漏れがないか確認）`}</td></tr>
         <tr><td>${mark(okBal)}</td><td>貸借が一致している</td><td class="note">借方計 ¥${yen(dr)}／貸方計 ¥${yen(cr)}${bad ? `（借方と貸方が合わない仕訳が${bad}件）` : ""}</td></tr>
       </tbody></table></div>
-      ${closed && me.justClosed === month ? `<div class="askbox" id="cl-bk"><p><strong>${esc(month)}月度を締めました。</strong>${esc(me.copyNote || "")}いまの全データをバックアップ（PCにJSONファイルを保存）しますか？</p>
-        <div class="actions"><button type="button" class="sub" id="cl-bk-no">あとで</button><button type="button" class="primary" id="cl-bk-yes">バックアップを保存する</button></div><p class="note" id="cl-bk-msg"></p></div>` : ""}
+      ${closed && me.justClosed === month ? `<div class="askbox" id="cl-bk"><p><strong>${esc(month)}月度を締めました。</strong>${esc(me.copyNote || "")}いまの全データをバックアップしますか？（おすすめ：Googleドライブ）</p>
+        <div class="actions"><button type="button" class="sub" id="cl-bk-no">あとで</button><button type="button" class="primary" id="cl-bk-drive">Googleドライブに保存</button><button type="button" class="sub" id="cl-bk-yes">PCに保存</button></div><p class="note" id="cl-bk-msg"></p></div>` : ""}
       ${closed ? `
         <p class="note">${esc(month)}月度は ${ts(closing.closedAt) ? esc(ts(closing.closedAt).toLocaleString("ja-JP")) : ""} に締めました（締めた時の残高の控えを保存済み）。</p>
         ${changed.length ? `<div class="askbox"><p><strong>⚠ 締めた後に変わりました。</strong>締めた時の控えと、いまの計算結果がずれている科目があります。</p>
@@ -280,6 +280,15 @@ async function renderClose(view) {
   $("cl-next").addEventListener("click", () => { me.month = shiftMonth(month, 1); me.date = ""; renderMonthEnd(); });
   if ($("cl-bk")) {
     $("cl-bk-no").addEventListener("click", () => { me.justClosed = null; $("cl-bk").remove(); });
+    $("cl-bk-drive").addEventListener("click", async () => {
+      $("cl-bk-drive").disabled = true; $("cl-bk-yes").disabled = true; $("cl-bk-msg").textContent = "Googleの許可の画面を確認してください…";
+      try {
+        const r = await saveBackupToDrive(`my-ledger-backup-月次締め-${month}`);
+        me.justClosed = null;
+        $("cl-bk-msg").innerHTML = `ドライブに保存しました（${esc(r.name)}）。<a href="${esc(r.folderUrl)}" target="_blank" rel="noopener">ドライブのフォルダを開く</a>`;
+        $("cl-bk-drive").hidden = true; $("cl-bk-yes").hidden = true; $("cl-bk-no").textContent = "閉じる";
+      } catch (err) { console.error(err); $("cl-bk-drive").disabled = false; $("cl-bk-yes").disabled = false; $("cl-bk-msg").textContent = "失敗しました：" + err.message; }
+    });
     $("cl-bk-yes").addEventListener("click", async () => {
       $("cl-bk-yes").disabled = true; $("cl-bk-msg").textContent = "保存しています…";
       try {
