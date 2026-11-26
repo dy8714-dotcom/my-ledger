@@ -97,6 +97,13 @@ export async function loadBackupInfo() {
   } catch (err) { state.lastBackupAt = null; }
 }
 
+// 期首の内訳（貸借内訳の期首分。meta/openings に {items:[{key, partyId, label, amount}]}）
+export async function loadOpenings() {
+  const snap = await getDoc(doc(col("meta"), "openings"));
+  state.openings = snap.exists() ? snap.data().items || [] : [];
+  return state.openings;
+}
+
 export async function loadAssets() {
   state.assets = toList(await getDocs(col("assets"))).sort((x, y) => (x.acquiredDate || "") < (y.acquiredDate || "") ? -1 : 1);
   return state.assets;
@@ -124,6 +131,7 @@ export async function loadAll() {
   await loadBackupInfo();
   try { await loadClosings(); } catch (err) { console.error("[月次締め] 読み込み失敗", err); state.closings = []; }
   try { await loadRecurring(); } catch (err) { console.error("[定期支払] 読み込み失敗", err); state.recurring = []; }
+  try { await loadOpenings(); } catch (err) { console.error("[期首の内訳] 読み込み失敗", err); state.openings = []; }
   try { await loadAssets(); } catch (err) { console.error("[月割り償却] 読み込み失敗", err); state.assets = []; }
 }
 

@@ -363,3 +363,5 @@ tr.off td { color: #8a8f99; background: #f3f1ec; }
 .bk-ok { color: #1b6431; } .bk-ng { color: #a3410a; font-weight: 700; }
 .bk-warnrow td { background: #fff4e6; color: #874607; }
 @media print { .bkclosed .bkbody { display: block !important; } .bkhead { padding: 4px 6px; } .bkgrp { break-inside: avoid; } .hdrcheck { display: none; } .monthbar .sub { display: none; } }
+.bkact { padding: 8px 10px 0; text-align: right; }
+@media print { .bkact { display: none; } }

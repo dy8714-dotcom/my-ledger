@@ -1,7 +1,8 @@
 // 貸借内訳（9章・I8a）：科目の残高と、内訳（取引先ごと・固定資産ごと）の合計を照合する
-import { state, loadAllVouchers, loadAssets } from "./state.js?v=0.2I8a";
-import { $, esc, yen, accChip, shiftMonth, showError } from "./util.js?v=0.2I8a";
-import { bsAt } from "./statements.js?v=0.2I8a";
+import { state, col, loadAllVouchers, loadAssets } from "./state.js?v=0.2I8b";
+import { $, esc, yen, shiftMonth, showError, openModal, closeModal } from "./util.js?v=0.2I8b";
+import { setDoc, doc } from "https://www.gstatic.com/firebasejs/13.4.0/firebase-firestore.js";
+import { bsAt } from "./statements.js?v=0.2I8b";
 
 const idxOf = (m) => { const [y, mm] = m.split(".").map((x) => parseInt(x, 10)); return y * 12 + (mm - 1); };
 const labelOf = (idx) => `${2000 + Math.floor(idx / 12)}年${(idx % 12) + 1}月`;
@@ -14,7 +15,7 @@ export const PARTY_NOS = [20, 22, 41, 45];
 const accByNo = (accountsById, no) => Object.values(accountsById).find((a) => a.no === no);
 
 // X月末時点の照合結果を作る。戻り値 { groups, bs, allOk }
-export function computeBreakdown(list, accountsById, assets, X, parties) {
+export function computeBreakdown(list, accountsById, assets, X, parties, openings = state.openings || []) {
   const bs = bsAt(list, accountsById, X);
   const groups = [];
 
@@ -31,12 +32,16 @@ export function computeBreakdown(list, accountsById, assets, X, parties) {
         by[k] = (by[k] || 0) + (l.side === "debit" ? 1 : -1) * sign * (l.amount || 0);
       });
     });
+    const ops = openings.filter((o) => o.key === "p" + no && o.partyId);
+    const opTotal = ops.reduce((s, o) => s + (o.amount || 0), 0);
+    ops.forEach((o) => { by[o.partyId] = (by[o.partyId] || 0) + (o.amount || 0); });
+    by[""] = (by[""] || 0) - opTotal;
     const nameOf = (id) => ((parties || state.parties || []).find((p) => p.id === id) || {}).name || "（削除された取引先）";
     const rows = Object.keys(by).filter((k) => k && by[k] !== 0).map((k) => ({ label: nameOf(k), amt: by[k] })).sort((p, r) => Math.abs(r.amt) - Math.abs(p.amt));
     const noParty = by[""] || 0;
     const total = rows.reduce((s, r) => s + r.amt, 0);
     const bal = bs.bal[a.id] || 0;
-    groups.push({ key: "p" + no, title: `${a.no} ${a.name}`, sub: a.kind === "asset" ? "取引先ごと" : "支払先ごと", accIds: [a.id], rows, noParty, total, bal, diff: bal - total, ok: bal === total, link: a.id });
+    groups.push({ key: "p" + no, opTotal, title: `${a.no} ${a.name}`, sub: a.kind === "asset" ? "取引先ごと" : "支払先ごと", accIds: [a.id], rows, noParty, total, bal, diff: bal - total, ok: bal === total, link: a.id });
   });
 
   // 固定資産：登録した資産ごとの残額（取得額 − 償却済み）
@@ -54,11 +59,13 @@ export function computeBreakdown(list, accountsById, assets, X, parties) {
     const rest = (as.amount || 0) - dep;
     if (rest !== 0) fx.push({ label: as.name, amt: rest, note: `取得 ${yen(as.amount || 0)}／償却済み ${yen(dep)}` });
   });
+  const fxOps = openings.filter((o) => o.key === "fx");
+  fxOps.forEach((o) => { if (o.amount) fx.push({ label: o.label || "（期首の資産）", amt: o.amount || 0, note: "期首の内訳" }); });
   const fxTotal = fx.reduce((s, r) => s + r.amt, 0);
   const fxBal = [...accIds].reduce((s, id) => s + (bs.bal[id] || 0), 0);
   if (fx.length || fxBal !== 0) {
     const nos = [...accIds].map((id) => (accountsById[id] || {}).no).filter(Boolean).sort((p, r) => p - r);
-    groups.push({ key: "fx", title: `${nos.join("・")} 固定資産`, sub: "月割り償却と連動", accIds: [...accIds], rows: fx, noParty: 0, total: fxTotal, bal: fxBal, diff: fxBal - fxTotal, ok: fxBal === fxTotal, fixed: true });
+    groups.push({ key: "fx", opTotal: fxOps.reduce((s, o) => s + (o.amount || 0), 0), title: `${nos.join("・")} 固定資産`, sub: "月割り償却と連動", accIds: [...accIds], rows: fx, noParty: 0, total: fxTotal, bal: fxBal, diff: fxBal - fxTotal, ok: fxBal === fxTotal, fixed: true });
   }
   const allOk = groups.every((g) => g.ok) && bs.gap === 0;
   return { groups, bs, allOk, ngCount: groups.filter((g) => !g.ok).length };
@@ -113,7 +120,7 @@ function draw(list) {
       `<tr class="tot"><td>内訳の合計</td><td class="r num">${num(g.total)}</td><td></td></tr>`;
     return `<section class="bkgrp${open ? "" : " bkclosed"}" data-key="${g.key}">
       <button type="button" class="bkhead"><span><span class="bkarrow">▸</span> ${esc(g.title)} <span class="note">（${esc(g.sub)}）</span></span><span class="${g.ok ? "bk-ok" : "bk-ng"}">${g.ok ? "✓" : "⚠"}　${yen(g.bal)}</span></button>
-      <div class="bkbody"><table class="tbl tb st"><colgroup><col style="width:34%"><col style="width:22%"><col style="width:44%"></colgroup><thead><tr><th>${g.fixed ? "品名" : "取引先"}</th><th class="r">金額</th><th>備考</th></tr></thead><tbody>${rows}</tbody></table></div></section>`;
+      <div class="bkbody"><div class="bkact"><button type="button" class="sub bkop" data-key="${g.key}">期首の内訳を登録${g.opTotal ? "（登録済み " + yen(g.opTotal) + "）" : ""}</button></div><table class="tbl tb st"><colgroup><col style="width:34%"><col style="width:22%"><col style="width:44%"></colgroup><thead><tr><th>${g.fixed ? "品名" : "取引先"}</th><th class="r">金額</th><th>備考</th></tr></thead><tbody>${rows}</tbody></table></div></section>`;
   }).join("");
 
   const gapBadge = `<span class="${r.bs.gap === 0 ? "okbadge" : "warnbadge"}">貸借一致 ${r.bs.gap === 0 ? "✓" : "✗ 差額 " + yen(r.bs.gap)}</span> <span class="${r.groups.every((g) => g.ok) ? "okbadge" : "warnbadge"}">内訳照合 ${r.groups.every((g) => g.ok) ? "✓" : "⚠ " + r.ngCount + "件"}</span>`;
@@ -147,6 +154,8 @@ function draw(list) {
     document.body.appendChild(a); a.click(); a.remove();
   });
   $("view").onclick = (e) => {
+    const ob = e.target.closest(".bkop");
+    if (ob) { openOpening(r.groups.find((x) => x.key === ob.dataset.key), () => draw(list)); return; }
     const h = e.target.closest(".bkhead");
     if (h) { const s = h.parentElement; s.classList.toggle("bkclosed"); (s.classList.contains("bkclosed") ? openKeys.delete(s.dataset.key) : openKeys.add(s.dataset.key)); return; }
     const a = e.target.closest("a.lk");
@@ -158,4 +167,48 @@ function draw(list) {
     document.querySelector('#nav [data-tab="ledger"]').click();
   };
   refreshHeaderCheck();
+}
+
+// ---------- 期首の内訳（取引先を付けられない期首仕訳の分を、ここで振り分ける） ----------
+function openOpening(g, redraw) {
+  if (!g) return;
+  const mine = (state.openings || []).filter((o) => o.key === g.key);
+  const parties = [...(state.parties || [])].sort((p, r) => String(p.kana || p.name).localeCompare(String(r.kana || r.name), "ja"));
+  const opt = (sel) => `<option value="">（選ぶ）</option>` + parties.map((p) => `<option value="${esc(p.id)}"${p.id === sel ? " selected" : ""}>${esc(p.name)}</option>`).join("");
+  const rowHtml = (o) => `<tr>
+      <td>${g.fixed ? `<input type="text" class="op-label" value="${esc(o.label || "")}" placeholder="品名など">` : `<select class="op-party">${opt(o.partyId)}</select>`}</td>
+      <td><input type="text" inputmode="numeric" class="op-amt" value="${o.amount ? esc(String(o.amount)) : ""}" placeholder="金額"></td>
+      <td><button type="button" class="sub op-del" aria-label="この行を消す">×</button></td></tr>`;
+  const base = (g.fixed ? g.diff : g.noParty) + g.opTotal; // 登録前に残っていた「振り分け前の額」
+  openModal(`<div class="dialog" role="dialog" aria-modal="true" style="max-width:560px">
+    <h2>期首の内訳　${esc(g.title)}</h2>
+    <p class="note">${g.fixed ? "資産として登録していない期首の分を、品名ごとに分けて入れます。" : "9月1日の期首仕訳など、取引先を付けられなかった分を、取引先ごとに振り分けて入れます。"}仕訳そのものは変わりません。</p>
+    <p class="note">振り分ける対象：<strong>${yen(base)}</strong>　／　入力した合計：<strong id="op-sum">0</strong>　／　残り：<strong id="op-rest">0</strong></p>
+    <table class="tbl"><thead><tr><th>${g.fixed ? "品名" : "取引先"}</th><th>金額（円）</th><th></th></tr></thead><tbody id="op-rows">${(mine.length ? mine : [{}]).map(rowHtml).join("")}</tbody></table>
+    <p><button type="button" class="sub" id="op-add">＋ 行を追加</button></p>
+    <p class="note" id="op-msg"></p>
+    <div class="actions"><button type="button" class="sub" id="op-cancel">閉じる</button><button type="button" class="primary" id="op-save">保存</button></div></div>`);
+  const body = $("op-rows");
+  const num = (t) => parseInt(String(t || "").replace(/[,，\s]/g, "").replace(/[０-９]/g, (c) => String.fromCharCode(c.charCodeAt(0) - 0xFEE0)), 10) || 0;
+  const read = () => [...body.querySelectorAll("tr")].map((tr) => ({ key: g.key, partyId: (tr.querySelector(".op-party") || {}).value || "", label: ((tr.querySelector(".op-label") || {}).value || "").trim(), amount: num(tr.querySelector(".op-amt").value) }));
+  const sum = () => { const t = read().reduce((s, o) => s + o.amount, 0); $("op-sum").textContent = yen(t); $("op-rest").textContent = yen(base - t); };
+  sum();
+  $("modal").oninput = sum; $("modal").onchange = sum;
+  $("modal").onclick = (e) => {
+    if (e.target.closest(".op-del")) { e.target.closest("tr").remove(); if (!body.children.length) body.insertAdjacentHTML("beforeend", rowHtml({})); sum(); }
+  };
+  $("op-add").onclick = () => body.insertAdjacentHTML("beforeend", rowHtml({}));
+  $("op-cancel").onclick = () => { $("modal").onclick = null; $("modal").oninput = null; $("modal").onchange = null; closeModal(); };
+  $("op-save").onclick = async () => {
+    const items = read().filter((o) => o.amount);
+    if (items.some((o) => (g.fixed ? !o.label : !o.partyId))) return ($("op-msg").textContent = g.fixed ? "品名を入れてください。" : "取引先を選んでください。");
+    $("op-save").disabled = true; $("op-msg").textContent = "保存中…";
+    try {
+      const all = [...(state.openings || []).filter((o) => o.key !== g.key), ...items];
+      await setDoc(doc(col("meta"), "openings"), { items: all, updatedAt: Date.now() });
+      state.openings = all;
+      $("modal").onclick = null; $("modal").oninput = null; $("modal").onchange = null;
+      closeModal(); redraw();
+    } catch (err) { $("op-save").disabled = false; $("op-msg").textContent = "保存に失敗しました：" + (err.code || err.message); }
+  };
 }
