@@ -1,8 +1,9 @@
 // 元帳・検索（条件で絞り込み、科目を1つ選ぶと残高を積み上げて表示）
-import { state, col, loadAllVouchers } from "./state.js?v=0.2I10d";
-import { $, esc, norm, hk, yen, parseAmount, WD, accChip, showError } from "./util.js?v=0.2I10d";
-import { createCombo } from "./combo.js?v=0.2I10d";
-import { openEdit } from "./entry.js?v=0.2I10d";
+import { kindOf, KINDS, kindChip } from "./kinds.js?v=0.2I11a";
+import { state, col, loadAllVouchers } from "./state.js?v=0.2I11a";
+import { $, esc, norm, hk, yen, parseAmount, WD, accChip, showError } from "./util.js?v=0.2I11a";
+import { createCombo } from "./combo.js?v=0.2I11a";
+import { openEdit } from "./entry.js?v=0.2I11a";
 import { doc, getDoc, setDoc } from "https://www.gstatic.com/firebasejs/13.4.0/firebase-firestore.js";
 
 const isBlank = (a) => a.name.startsWith("（") || a.name === "ー";
@@ -16,7 +17,7 @@ const MARKS = [["☆", "☆"], ["★", "★"], ["◇", "◇"], ["◆", "◆"], [
 
 export const defaultCond = () => ({
   accounts: [], side: "both", period: "month", fromM: todayKey(), toM: todayKey(), dateFrom: "", dateTo: "",
-  min: "", max: "", fields: [], parties: [], memo: "", biz: [], tax: [], marks: []
+  min: "", max: "", fields: [], parties: [], memo: "", biz: [], tax: [], marks: [], kinds: []
 });
 
 // ---------- 絞り込みの計算（画面なしで試験できるように分けてある） ----------
@@ -51,6 +52,7 @@ export function runSearch(all, c, accountsById) {
     if (memoQ && !norm(v.lines.map((l) => l.memo || "").join(" ")).includes(memoQ)) return false;
     if (c.biz.length && !v.lines.some((l) => c.biz.includes(l.biz))) return false;
     if (c.tax.length && !v.lines.some((l) => c.tax.includes(String(l.tax || 0)))) return false;
+    if ((c.kinds || []).length && !c.kinds.includes(kindOf(v))) return false;
     if (c.marks.length) {
       const hit = c.marks.some((m) => (m === "late" ? v.late : m === "multi" ? isMulti(v) : v.mark === m));
       if (!hit) return false;
@@ -172,6 +174,7 @@ function drawScreen(all) {
         <div class="in"><label>区分・税率</label><div class="checks" id="lg-chk1">
           <label><input type="checkbox" data-g="biz" value="biz">事業</label><label><input type="checkbox" data-g="biz" value="life">生活</label>
           <label><input type="checkbox" data-g="tax" value="0">税なし</label><label><input type="checkbox" data-g="tax" value="8">8%</label><label><input type="checkbox" data-g="tax" value="10">10%</label></div></div>
+        <div class="in"><label>種別</label><div class="checks" id="lg-chk3">${KINDS.map(([k, n]) => `<label><input type="checkbox" data-g="kinds" value="${k}">${esc(n)}</label>`).join("")}</div></div>
         <div class="in"><label>印</label><div class="checks" id="lg-chk2">${MARKS.map(([v, n]) => `<label><input type="checkbox" data-g="marks" value="${esc(v)}">${esc(n)}</label>`).join("")}</div></div>
       </div>
       <div class="lgrow"><button type="button" class="sub" id="lg-clear">条件をクリア</button>
@@ -313,7 +316,7 @@ function drawScreen(all) {
     const c = (html, cls = "") => `<div class="${cls}">${html}</div>`;
     const common = (v) => c(esc(v.month + "-" + v.seq), "num muted");
     const rest = (v, l) => c(v.fieldId && state.fieldsById[v.fieldId] ? `<span class="fd"><b>${esc(state.fieldsById[v.fieldId].no)}</b>${esc(hk(state.fieldsById[v.fieldId].name))}</span>` : "") +
-      c(esc(hk((state.partiesById[v.partyId] || {}).name || ""))) + c(esc(memoOf(v, l)) + (v.late ? ' <span class="chip late">後日記帳</span>' : ""), "memo");
+      c(esc(hk((state.partiesById[v.partyId] || {}).name || ""))) + c(esc(memoOf(v, l)) + (v.late ? ' <span class="chip late">後日記帳</span>' : "") + kindChip(v), "memo");
     let cols, head, body, foot;
     const n = rows.length;
     if (ledgerMode) {

@@ -1,17 +1,18 @@
 // 記帳画面（入力欄と仕訳の一覧）
-import { state, col, db, loadParties, loadVouchers, fetchMonthVouchers, loadRecurring } from "./state.js?v=0.2I10d";
-import { downloadFullBackup } from "./backup.js?v=0.2I10d";
-import { renderDeprBanner, askDeprChange, afterDeprEdit } from "./assets.js?v=0.2I10d";
-import { printSelectedOnly } from "./print.js?v=0.2I10d";
-import { renderRecBanner } from "./recurring.js?v=0.2I10d";
-import { askClosedConfirm } from "./monthend.js?v=0.2I10d";
-import { isClosed } from "./state.js?v=0.2I10d";
+import { state, col, db, loadParties, loadVouchers, fetchMonthVouchers, loadRecurring } from "./state.js?v=0.2I11a";
+import { downloadFullBackup } from "./backup.js?v=0.2I11a";
+import { renderDeprBanner, askDeprChange, afterDeprEdit } from "./assets.js?v=0.2I11a";
+import { printSelectedOnly } from "./print.js?v=0.2I11a";
+import { kindChip } from "./kinds.js?v=0.2I11a";
+import { renderRecBanner } from "./recurring.js?v=0.2I11a";
+import { askClosedConfirm } from "./monthend.js?v=0.2I11a";
+import { isClosed } from "./state.js?v=0.2I11a";
 import { $, esc, norm, hk, yen, parseAmount, WD, ymd, monthOf, shiftMonth, firstDayOf, accChip, openModal, closeModal }
-  from "./util.js?v=0.2I10d";
-import { createCombo } from "./combo.js?v=0.2I10d";
+  from "./util.js?v=0.2I11a";
+import { createCombo } from "./combo.js?v=0.2I11a";
 import { doc, setDoc, updateDoc, deleteDoc, writeBatch, serverTimestamp, increment, arrayUnion, deleteField }
   from "https://www.gstatic.com/firebasejs/13.4.0/firebase-firestore.js";
-import { patternsOf, sortPatterns, describePattern, addPattern, fromTemplate } from "./patterns.js?v=0.2I10d";
+import { patternsOf, sortPatterns, describePattern, addPattern, fromTemplate } from "./patterns.js?v=0.2I11a";
 
 // ---------- 候補の作り方 ----------
 const isBlank = (a) => a.name.startsWith("（") || a.name === "ー";
@@ -1170,7 +1171,7 @@ function voucherRows(vo, alt, check) {
       <td>${chipOf(credits[i])}</td>
       <td>${first && fd ? `<span class="fd"><b>${esc(fd.no)}</b>${esc(hk(fd.name))}</span>` : ""}</td>
       <td>${first ? esc(hk(vo._partyName || partyLabel(vo.partyId))) : ""}</td>
-      <td class="memo">${esc(hk([...new Set([debits[i] && debits[i].memo, credits[i] && credits[i].memo].filter(Boolean))].join(" ／ ")))}${first && vo.late ? ` <span class="chip late">後日記帳 ${esc(fmtMD(vo.entryDate))}</span>` : ""}${(() => { const l = [debits[i], credits[i]].find((x) => x && x.biz === "biz" && ["expense", "revenue"].includes((state.accountsById[x.accId] || {}).kind)); return l ? ' <span class="chip biz">事業</span>' : ""; })()}</td>
+      <td class="memo">${esc(hk([...new Set([debits[i] && debits[i].memo, credits[i] && credits[i].memo].filter(Boolean))].join(" ／ ")))}${first && vo.late ? ` <span class="chip late">後日記帳 ${esc(fmtMD(vo.entryDate))}</span>` : ""}${first ? kindChip(vo) : ""}${(() => { const l = [debits[i], credits[i]].find((x) => x && x.biz === "biz" && ["expense", "revenue"].includes((state.accountsById[x.accId] || {}).kind)); return l ? ' <span class="chip biz">事業</span>' : ""; })()}</td>
       <td class="amt num ${isRev ? "inc" : ""}">${first ? (isRev ? "+" : "") + yen(total) : ""}</td>
       <td class="mk">${first ? esc(vo.mark || "") : ""}</td>
     </tr>`;

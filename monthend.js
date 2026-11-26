@@ -1,9 +1,9 @@
 // 月末（手順I3）：金融資産の評価替え
-import { state, col, db, loadAllVouchers, loadVouchers, fetchMonthVouchers, loadClosings, isClosed, loadAssets } from "./state.js?v=0.2I10d";
-import { pendingDrafts } from "./assets.js?v=0.2I10d";
-import { monthStatus } from "./recurring.js?v=0.2I10d";
-import { downloadFullBackup, makeCopy, saveBackupToDrive } from "./backup.js?v=0.2I10d";
-import { $, esc, yen, ymd, hk, shiftMonth, monthOf, WD, showError } from "./util.js?v=0.2I10d";
+import { state, col, db, loadAllVouchers, loadVouchers, fetchMonthVouchers, loadClosings, isClosed, loadAssets } from "./state.js?v=0.2I11a";
+import { pendingDrafts } from "./assets.js?v=0.2I11a";
+import { monthStatus } from "./recurring.js?v=0.2I11a";
+import { downloadFullBackup, makeCopy, saveBackupToDrive } from "./backup.js?v=0.2I11a";
+import { $, esc, yen, ymd, hk, shiftMonth, monthOf, WD, showError } from "./util.js?v=0.2I11a";
 import { doc, getDocs, writeBatch, setDoc, deleteField, serverTimestamp, arrayUnion } from "https://www.gstatic.com/firebasejs/13.4.0/firebase-firestore.js";
 
 const EVAL_NOS = [26, 27, 28, 29, 30]; // 評価替えの対象（金融資産）
@@ -168,7 +168,7 @@ export async function postEval(todo, month, date, isEnd, live) {
           seq = ++seqBase;
         }
         batch.set(ref, {
-          month, seq, date, entryDate: today, late: today > date, fieldId: "", partyId: "", mark: "", auto: "valuation", accId: r.acc.id,
+          month, seq, date, entryDate: today, late: today > date, fieldId: "", partyId: "", mark: "", auto: "valuation", kind: "valuation", batchId: `val-${month}`, accId: r.acc.id,
           lines: p.voucher.lines, deleted: deleteField(), deletedAt: deleteField(), updatedAt: serverTimestamp(), ...(r.existing ? {} : { createdAt: serverTimestamp() })
         }, { merge: true });
         voucherId = r.exId;

@@ -1,6 +1,6 @@
 // 月割り償却（手順I2a）：資産の登録と予定表
-import { state, col, db, loadAssets, loadVouchers, fetchMonthVouchers, isClosed } from "./state.js?v=0.2I10d";
-import { $, esc, yen, ymd, openModal, closeModal, showError } from "./util.js?v=0.2I10d";
+import { state, col, db, loadAssets, loadVouchers, fetchMonthVouchers, isClosed } from "./state.js?v=0.2I11a";
+import { $, esc, yen, ymd, openModal, closeModal, showError } from "./util.js?v=0.2I11a";
 import { doc, addDoc, updateDoc, writeBatch, arrayUnion, serverTimestamp } from "https://www.gstatic.com/firebasejs/13.4.0/firebase-firestore.js";
 
 // ---------- 計算（画面に依存しない部分） ----------
@@ -312,7 +312,7 @@ export async function postDrafts(picks, onStep) {
     const memo = `${a.name} 月割り償却 ${p.n}/${p.total}`;
     const voucher = {
       month: p.month, seq: nextSeq[p.month]++, date: p.date, entryDate: today, late: today > p.date,
-      fieldId: "", partyId: "", mark: "", auto: "depreciation", assetId: a.id,
+      fieldId: "", partyId: "", mark: "", auto: "depreciation", kind: "depr", batchId: `depr-${p.month}`, assetId: a.id,
       lines: [
         { side: "debit", accId: a.expenseAccId, amount: p.amount, tax: 0, memo, tags: [], biz },
         { side: "credit", accId: a.assetAccId, amount: p.amount, tax: 0, memo, tags: [], biz }
@@ -426,7 +426,7 @@ export async function postLump(a, date, accId, note) {
   const biz = a.biz || (state.accountsById[accId] || {}).biz || "life";
   const batch = writeBatch(db);
   batch.set(doc(col("vouchers"), id), {
-    month, seq, date, entryDate: today, late: today > date, fieldId: "", partyId: "", mark: "", auto: "depreciation", lump: true, assetId: a.id,
+    month, seq, date, entryDate: today, late: today > date, fieldId: "", partyId: "", mark: "", auto: "depreciation", kind: "depr", batchId: `depr-${month}`, lump: true, assetId: a.id,
     lines: [
       { side: "debit", accId, amount, tax: 0, memo, tags: [], biz },
       { side: "credit", accId: a.assetAccId, amount, tax: 0, memo, tags: [], biz }
