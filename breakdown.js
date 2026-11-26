@@ -1,8 +1,8 @@
 // 貸借内訳（9章・I8a）：科目の残高と、内訳（取引先ごと・固定資産ごと）の合計を照合する
-import { state, col, loadAllVouchers, loadAssets } from "./state.js?v=0.2I8d";
-import { $, esc, yen, shiftMonth, showError, openModal, closeModal } from "./util.js?v=0.2I8d";
+import { state, col, loadAllVouchers, loadAssets } from "./state.js?v=0.2I8e";
+import { $, esc, yen, shiftMonth, showError, openModal, closeModal } from "./util.js?v=0.2I8e";
 import { setDoc, doc } from "https://www.gstatic.com/firebasejs/13.4.0/firebase-firestore.js";
-import { bsAt } from "./statements.js?v=0.2I8d";
+import { bsAt } from "./statements.js?v=0.2I8e";
 
 const idxOf = (m) => { const [y, mm] = m.split(".").map((x) => parseInt(x, 10)); return y * 12 + (mm - 1); };
 const labelOf = (idx) => `${2000 + Math.floor(idx / 12)}年${(idx % 12) + 1}月`;
@@ -18,6 +18,13 @@ export const SNAP_DEFS = [
   { key: "s18", nos: [18], title: (a) => `${a[0].no} ${a[0].name}`, sub: "銀行ごと・月末に入力", labelName: "銀行" },
   { key: "sfin", nos: [26, 27, 28, 29, 30], title: (a) => `${a.map((x) => x.no).join("・")} 金融資産`, sub: "口座区分×資産の種類・任意", labelName: "口座・資産の種類", optional: true }
 ];
+// 商品券など枚数のある内訳は「1枚の金額 × 枚数」。古い入力（金額欄に1枚の金額を入れていたもの）も、その形に直して読む
+export function normSnap(o, d) {
+  if (!d || !d.unit) return o;
+  const qty = o.qty || 0;
+  const price = o.price !== undefined ? o.price || 0 : (qty > 0 ? o.amount || 0 : 0);
+  return { ...o, price, qty, amount: qty > 0 || o.price !== undefined ? price * qty : o.amount || 0 };
+}
 const keyOfIdx = (i) => String(Math.floor(i / 12)).padStart(2, "0") + "." + ((i % 12) + 1);
 
 const accByNo = (accountsById, no) => Object.values(accountsById).find((a) => a.no === no);
@@ -86,13 +93,14 @@ export function computeBreakdown(list, accountsById, assets, X, parties, opening
     const accs = d.nos.map((no) => accByNo(accountsById, no)).filter((a) => a && !a.hidden);
     if (!accs.length) return;
     const bal = accs.reduce((s, a) => s + (bs.bal[a.id] || 0), 0);
-    const its = snaps.filter((o) => o.key === d.key && o.month === mkey);
-    const rows = its.filter((o) => o.amount).map((o) => ({ label: o.label || "（品名なし）", amt: o.amount || 0, note: o.qty ? `${o.qty}${d.unit || ""}` : "" }));
+    const its = snaps.filter((o) => o.key === d.key && o.month === mkey).map((o) => normSnap(o, d));
+    const rows = its.filter((o) => o.amount).map((o) => ({ label: o.label || "（品名なし）", amt: o.amount || 0, qty: o.qty || 0, price: o.price || 0, note: d.unit ? "" : o.qty ? `${o.qty}` : "" }));
+    const qtyTotal = rows.reduce((s, r) => s + (r.qty || 0), 0);
     const total = rows.reduce((s, r) => s + r.amt, 0);
     const empty = its.length === 0;
     const skip = empty && (d.optional || bal === 0); // 内訳なしでも使える（任意）／残高0なら不要
     if (skip && bal === 0 && !d.always) return;
-    groups.push({ key: d.key, snap: true, title: d.title(accs), sub: d.sub, accIds: accs.map((a) => a.id), rows, noParty: 0, total, bal, diff: bal - total, ok: skip ? true : bal === total, skip, empty, opTotal: 0, unit: d.unit, labelName: d.labelName, optional: d.optional, mkey });
+    groups.push({ key: d.key, snap: true, title: d.title(accs), sub: d.sub, accIds: accs.map((a) => a.id), rows, qtyTotal, noParty: 0, total, bal, diff: bal - total, ok: skip ? true : bal === total, skip, empty, opTotal: 0, unit: d.unit, labelName: d.labelName, optional: d.optional, mkey });
   });
   const allOk = groups.every((g) => g.ok) && bs.gap === 0;
   return { groups, bs, allOk, ngCount: groups.filter((g) => !g.ok).length, before: false, baseIdx };
@@ -143,16 +151,17 @@ function draw(list) {
 
   const body = r.groups.map((g) => {
     const open = openKeys.has(g.key) || !g.ok;
-    const rows = g.rows.map((x) => `<tr><td>${esc(x.label)}</td><td class="r num">${num(x.amt)}</td><td class="muted">${esc(x.note || "")}</td></tr>`).join("") +
+    const cols = g.unit ? 4 : 3;
+    const rows = g.rows.map((x) => g.unit ? `<tr><td>${esc(x.label)}</td><td class="r num">${num(x.price)}</td><td class="r num">${x.qty}${esc(g.unit)}</td><td class="r num">${num(x.amt)}</td></tr>` : `<tr><td>${esc(x.label)}</td><td class="r num">${num(x.amt)}</td><td class="muted">${esc(x.note || "")}</td></tr>`).join("") +
       (g.noParty ? `<tr class="bk-warnrow"><td>（取引先なし）</td><td class="r num">${num(g.noParty)}</td><td>取引先を付けると照合に入ります</td></tr>` : "") +
-      (g.snap && !g.empty && g.diff ? `<tr class="bk-warnrow"><td>（内訳が足りない分）</td><td class="r num">${num(g.diff)}</td><td>科目の残高との差です</td></tr>` : "") +
+      (g.snap && !g.empty && g.diff ? (g.unit ? `<tr class="bk-warnrow"><td>（内訳が足りない分）</td><td></td><td></td><td class="r num">${num(g.diff)}</td></tr>` : `<tr class="bk-warnrow"><td>（内訳が足りない分）</td><td class="r num">${num(g.diff)}</td><td>科目の残高との差です</td></tr>`) : "") +
       (g.fixed && g.diff ? `<tr class="bk-warnrow"><td>（資産の登録なし）</td><td class="r num">${num(g.diff)}</td><td>設定の「月割り償却」に登録されていない分です</td></tr>` : "") +
-      (!g.rows.length && !g.noParty && !(g.fixed && g.diff) && !(g.snap && g.diff) ? `<tr><td colspan="3" class="muted">内訳はありません</td></tr>` : "") +
-      (g.snap && g.empty && g.diff ? `<tr class="bk-warnrow"><td>（未入力）</td><td class="r num">${num(g.diff)}</td><td>この月の内訳をまだ入れていません</td></tr>` : "") +
-      `<tr class="tot"><td>内訳の合計</td><td class="r num">${num(g.total)}</td><td></td></tr>`;
+      (!g.rows.length && !g.noParty && !(g.fixed && g.diff) && !(g.snap && g.diff) ? `<tr><td colspan="${cols}" class="muted">内訳はありません</td></tr>` : "") +
+      (g.snap && g.empty && g.diff ? (g.unit ? `<tr class="bk-warnrow"><td>（未入力）</td><td></td><td></td><td class="r num">${num(g.diff)}</td></tr>` : `<tr class="bk-warnrow"><td>（未入力）</td><td class="r num">${num(g.diff)}</td><td>この月の内訳をまだ入れていません</td></tr>`) : "") +
+      (g.unit ? `<tr class="tot"><td>内訳の合計</td><td></td><td class="r num">${g.qtyTotal || 0}${esc(g.unit)}</td><td class="r num">${num(g.total)}</td></tr>` : `<tr class="tot"><td>内訳の合計</td><td class="r num">${num(g.total)}</td><td></td></tr>`);
     return `<section class="bkgrp${open ? "" : " bkclosed"}" data-key="${g.key}">
       <button type="button" class="bkhead"><span><span class="bkarrow">▸</span> ${esc(g.title)} <span class="note">（${esc(g.sub)}）</span></span><span class="${g.ok ? "bk-ok" : "bk-ng"}">${g.ok ? "✓" : "⚠"}　${yen(g.bal)}</span></button>
-      <div class="bkbody"><div class="bkact">${g.snap ? `<button type="button" class="sub bksn" data-key="${g.key}">この月の内訳を入力${g.empty ? "" : "（入力済み）"}</button>` : `<button type="button" class="sub bkop" data-key="${g.key}">基準月末の内訳を登録${g.opTotal ? "（登録済み " + yen(g.opTotal) + "）" : ""}</button>`}</div><table class="tbl tb st"><colgroup><col style="width:34%"><col style="width:22%"><col style="width:44%"></colgroup><thead><tr><th>${g.fixed ? "品名" : g.snap ? esc(g.labelName) : "取引先"}</th><th class="r">金額</th><th>備考</th></tr></thead><tbody>${rows}</tbody></table></div></section>`;
+      <div class="bkbody"><div class="bkact">${g.snap ? `<button type="button" class="sub bksn" data-key="${g.key}">この月の内訳を入力${g.empty ? "" : "（入力済み）"}</button>` : `<button type="button" class="sub bkop" data-key="${g.key}">基準月末の内訳を登録${g.opTotal ? "（登録済み " + yen(g.opTotal) + "）" : ""}</button>`}</div><table class="tbl tb st">${g.unit ? `<colgroup><col style="width:40%"><col style="width:20%"><col style="width:16%"><col style="width:24%"></colgroup><thead><tr><th>${esc(g.labelName)}</th><th class="r">1${esc(g.unit)}の金額</th><th class="r">${esc(g.unit)}数</th><th class="r">金額（小計）</th></tr></thead>` : `<colgroup><col style="width:34%"><col style="width:22%"><col style="width:44%"></colgroup><thead><tr><th>${g.fixed ? "品名" : g.snap ? esc(g.labelName) : "取引先"}</th><th class="r">金額</th><th>備考</th></tr></thead>`}<tbody>${rows}</tbody></table></div></section>`;
   }).join("");
 
   const gapBadge = `<span class="${r.bs.gap === 0 ? "okbadge" : "warnbadge"}">貸借一致 ${r.bs.gap === 0 ? "✓" : "✗ 差額 " + yen(r.bs.gap)}</span> <span class="${r.groups.every((g) => g.ok) ? "okbadge" : "warnbadge"}">内訳照合 ${r.groups.every((g) => g.ok) ? "✓" : "⚠ " + r.ngCount + "件"}</span>`;
@@ -188,7 +197,7 @@ function draw(list) {
   $("bk-csv").addEventListener("click", () => {
     const L = [["科目", "内訳", "金額"].map(q).join(",")];
     r.groups.forEach((g) => {
-      g.rows.forEach((x) => L.push([q(g.title), q(x.label), x.amt].join(",")));
+      g.rows.forEach((x) => L.push([q(g.title), q(x.label + (g.unit ? `（${x.price}円×${x.qty}${g.unit}）` : "")), x.amt].join(",")));
       if (g.noParty) L.push([q(g.title), q("（取引先なし）"), g.noParty].join(","));
       L.push([q(g.title), q("科目の残高"), g.bal].join(","), [q(g.title), q("内訳の合計"), g.total].join(","));
     });
@@ -264,27 +273,43 @@ function openOpening(g, redraw) {
 function openSnapshot(g, redraw) {
   if (!g) return;
   const mkey = g.mkey;
+  const d = SNAP_DEFS.find((x) => x.key === g.key) || {};
   const all = state.snapshots || [];
-  const mine = all.filter((o) => o.key === g.key && o.month === mkey);
+  const mine = all.filter((o) => o.key === g.key && o.month === mkey).map((o) => normSnap(o, d));
   const prevMonths = [...new Set(all.filter((o) => o.key === g.key && idxOf(o.month) < idxOf(mkey)).map((o) => o.month))].sort((a, b) => idxOf(b) - idxOf(a));
-  const prev = prevMonths.length ? all.filter((o) => o.key === g.key && o.month === prevMonths[0]) : [];
+  const prev = prevMonths.length ? all.filter((o) => o.key === g.key && o.month === prevMonths[0]).map((o) => normSnap(o, d)) : [];
+  const U = g.unit;
+  const inp = "width:100%;box-sizing:border-box";
   const rowHtml = (o) => `<tr>
-      <td><input type="text" class="sn-label" value="${esc(o.label || "")}" placeholder="${esc(g.labelName)}"></td>
-      ${g.unit ? `<td><input type="text" inputmode="numeric" class="sn-qty" value="${o.qty ? esc(String(o.qty)) : ""}" placeholder="${esc(g.unit)}数" style="width:70px"></td>` : ""}
-      <td><input type="text" inputmode="numeric" class="sn-amt" value="${o.amount ? esc(String(o.amount)) : ""}" placeholder="金額"></td>
+      <td><input type="text" class="sn-label" style="${inp}" value="${esc(o.label || "")}" placeholder="${esc(g.labelName)}"></td>
+      ${U ? `<td><input type="text" inputmode="numeric" class="sn-price" style="${inp};text-align:right" value="${o.price ? esc(String(o.price)) : ""}" placeholder="1${esc(U)}の金額"></td>
+      <td><input type="text" inputmode="numeric" class="sn-qty" style="${inp};text-align:right" value="${o.qty ? esc(String(o.qty)) : ""}" placeholder="${esc(U)}数"></td>
+      <td class="r num sn-sub">0</td>` : `<td><input type="text" inputmode="numeric" class="sn-amt" style="${inp};text-align:right" value="${o.amount ? esc(String(o.amount)) : ""}" placeholder="金額"></td>`}
       <td><button type="button" class="sub sn-del" aria-label="この行を消す">×</button></td></tr>`;
-  openModal(`<div class="dialog" role="dialog" aria-modal="true" style="max-width:600px">
+  const cg = U ? `<colgroup><col style="width:36%"><col style="width:19%"><col style="width:13%"><col style="width:24%"><col style="width:8%"></colgroup>` : `<colgroup><col style="width:58%"><col style="width:34%"><col style="width:8%"></colgroup>`;
+  openModal(`<div class="dialog" role="dialog" aria-modal="true" style="max-width:820px;width:96vw">
     <h2>月末の内訳　${esc(g.title)}　${esc(mkey)}月度末</h2>
-    <p class="note">${esc(g.mkey)}月度末の内訳を、${esc(g.labelName)}ごとに入れます。仕訳は変わりません。</p>
-    <p class="note">科目の残高：<strong>${yen(g.bal)}</strong>　／　入力した合計：<strong id="sn-sum">0</strong>　／　残り：<strong id="sn-rest">0</strong></p>
-    <table class="tbl"><thead><tr><th>${esc(g.labelName)}</th>${g.unit ? `<th>${esc(g.unit)}数</th>` : ""}<th>金額（円）</th><th></th></tr></thead><tbody id="sn-rows">${(mine.length ? mine : [{}]).map(rowHtml).join("")}</tbody></table>
+    <p class="note">${esc(g.mkey)}月度末の内訳を、${esc(g.labelName)}ごとに入れます。${U ? `「1${esc(U)}の金額 × ${esc(U)}数」が小計になります。` : ""}仕訳は変わりません。</p>
+    <p class="note">科目の残高：<strong>${yen(g.bal)}</strong>　／　入力した合計：<strong id="sn-sum">0</strong>　／　残り：<strong id="sn-rest">0</strong>${U ? `　／　${esc(U)}数の合計：<strong id="sn-qsum">0</strong>` : ""}</p>
+    <table class="tbl" style="table-layout:fixed;width:100%">${cg}<thead><tr><th>${esc(g.labelName)}</th>${U ? `<th class="r">1${esc(U)}の金額</th><th class="r">${esc(U)}数</th><th class="r">小計</th>` : `<th class="r">金額（円）</th>`}<th></th></tr></thead><tbody id="sn-rows">${(mine.length ? mine : [{}]).map(rowHtml).join("")}</tbody></table>
     <p><button type="button" class="sub" id="sn-add">＋ 行を追加</button>${prev.length ? ` <button type="button" class="sub" id="sn-copy">${esc(prevMonths[0])}月度末の内容をコピー</button>` : ""}</p>
     <p class="note" id="sn-msg"></p>
     <div class="actions"><button type="button" class="sub" id="sn-cancel">閉じる</button><button type="button" class="primary" id="sn-save">保存</button></div></div>`);
   const body = $("sn-rows");
   const num = (t) => parseInt(String(t || "").replace(/[,，\s]/g, "").replace(/[０-９]/g, (c) => String.fromCharCode(c.charCodeAt(0) - 0xFEE0)), 10) || 0;
-  const read = () => [...body.querySelectorAll("tr")].map((tr) => ({ key: g.key, month: mkey, label: tr.querySelector(".sn-label").value.trim(), qty: tr.querySelector(".sn-qty") ? num(tr.querySelector(".sn-qty").value) : 0, amount: num(tr.querySelector(".sn-amt").value) }));
-  const sum = () => { const t = read().reduce((s, o) => s + o.amount, 0); $("sn-sum").textContent = yen(t); $("sn-rest").textContent = yen(g.bal - t); };
+  const read = () => [...body.querySelectorAll("tr")].map((tr) => {
+    const o = { key: g.key, month: mkey, label: tr.querySelector(".sn-label").value.trim() };
+    if (U) { o.price = num(tr.querySelector(".sn-price").value); o.qty = num(tr.querySelector(".sn-qty").value); o.amount = o.price * o.qty; }
+    else { o.qty = 0; o.amount = num(tr.querySelector(".sn-amt").value); }
+    return o;
+  });
+  const sum = () => {
+    const L = read();
+    if (U) body.querySelectorAll("tr").forEach((tr, i) => { tr.querySelector(".sn-sub").textContent = yen(L[i].amount); });
+    const t = L.reduce((s, o) => s + o.amount, 0);
+    $("sn-sum").textContent = yen(t); $("sn-rest").textContent = yen(g.bal - t);
+    if (U) $("sn-qsum").textContent = String(L.reduce((s, o) => s + o.qty, 0));
+  };
   sum();
   const off = () => { $("modal").onclick = null; $("modal").oninput = null; $("modal").onchange = null; };
   $("modal").oninput = sum; $("modal").onchange = sum;
@@ -293,7 +318,7 @@ function openSnapshot(g, redraw) {
   if ($("sn-copy")) $("sn-copy").onclick = () => { body.innerHTML = prev.map(rowHtml).join(""); sum(); };
   $("sn-cancel").onclick = () => { off(); closeModal(); };
   $("sn-save").onclick = async () => {
-    const items = read().filter((o) => o.amount || o.label);
+    const items = read().filter((o) => o.amount || o.label || o.qty);
     if (items.some((o) => !o.label)) return ($("sn-msg").textContent = `${g.labelName}を入れてください。`);
     $("sn-save").disabled = true; $("sn-msg").textContent = "保存中…";
     try {

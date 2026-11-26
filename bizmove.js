@@ -1,7 +1,7 @@
 // 科目を指定して、全期間の「事業／生活」の印をまとめて付け替える（設定の一つのタブ）
-import { state, col, db, loadAllVouchers, loadVouchers } from "./state.js?v=0.2I8d";
-import { downloadFullBackup } from "./backup.js?v=0.2I8d";
-import { $, esc, yen, hk, openModal, closeModal, showError } from "./util.js?v=0.2I8d";
+import { state, col, db, loadAllVouchers, loadVouchers } from "./state.js?v=0.2I8e";
+import { downloadFullBackup } from "./backup.js?v=0.2I8e";
+import { $, esc, yen, hk, openModal, closeModal, showError } from "./util.js?v=0.2I8e";
 import { doc, writeBatch, serverTimestamp } from "https://www.gstatic.com/firebasejs/13.4.0/firebase-firestore.js";
 
 const isPL = (a) => !!a && (a.kind === "expense" || a.kind === "revenue");
