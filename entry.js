@@ -1,15 +1,16 @@
 // 記帳画面（入力欄と仕訳の一覧）
-import { state, col, db, loadParties, loadVouchers, fetchMonthVouchers } from "./state.js?v=0.2I6c";
-import { downloadFullBackup } from "./backup.js?v=0.2I6c";
-import { renderDeprBanner, askDeprChange, afterDeprEdit } from "./assets.js?v=0.2I6c";
-import { askClosedConfirm } from "./monthend.js?v=0.2I6c";
-import { isClosed } from "./state.js?v=0.2I6c";
+import { state, col, db, loadParties, loadVouchers, fetchMonthVouchers } from "./state.js?v=0.2I6d";
+import { downloadFullBackup } from "./backup.js?v=0.2I6d";
+import { renderDeprBanner, askDeprChange, afterDeprEdit } from "./assets.js?v=0.2I6d";
+import { printSelectedOnly } from "./print.js?v=0.2I6d";
+import { askClosedConfirm } from "./monthend.js?v=0.2I6d";
+import { isClosed } from "./state.js?v=0.2I6d";
 import { $, esc, norm, hk, yen, parseAmount, WD, ymd, monthOf, shiftMonth, firstDayOf, accChip, openModal, closeModal }
-  from "./util.js?v=0.2I6c";
-import { createCombo } from "./combo.js?v=0.2I6c";
+  from "./util.js?v=0.2I6d";
+import { createCombo } from "./combo.js?v=0.2I6d";
 import { doc, setDoc, updateDoc, deleteDoc, writeBatch, serverTimestamp, increment, arrayUnion, deleteField }
   from "https://www.gstatic.com/firebasejs/13.4.0/firebase-firestore.js";
-import { patternsOf, sortPatterns, describePattern, addPattern, fromTemplate } from "./patterns.js?v=0.2I6c";
+import { patternsOf, sortPatterns, describePattern, addPattern, fromTemplate } from "./patterns.js?v=0.2I6d";
 
 // ---------- 候補の作り方 ----------
 const isBlank = (a) => a.name.startsWith("（") || a.name === "ー";
@@ -688,6 +689,8 @@ export function renderEntry() {
       <button type="button" class="navbtn" id="m-prev" aria-label="前の月度">◀</button>
       <h2 id="m-title"></h2>
       <button type="button" class="navbtn" id="m-next" aria-label="次の月度">▶</button>
+      <span class="spacer"></span>
+      <button type="button" class="sub" id="m-print" title="この月度の仕訳一覧をA4で印刷（PDFにも保存できます）">この月度を印刷</button>
     </div>
     <section class="panel">
       <h3><span class="bar"></span>新しい仕訳</h3>
@@ -715,6 +718,7 @@ export function renderEntry() {
     </section>`;
   $("m-prev").addEventListener("click", () => changeMonth(-1));
   $("m-next").addEventListener("click", () => changeMonth(1));
+  $("m-print").addEventListener("click", () => window.print());
   $("list-q").addEventListener("input", drawList);
   document.querySelectorAll(".listnav").forEach((nav) => {
     nav.addEventListener("click", (e) => { const b = e.target.closest("button[data-nav]"); if (b) navGo(b.dataset.nav); });
@@ -891,6 +895,7 @@ function drawSelBar() {
   bar.hidden = false;
   bar.innerHTML = `<span><strong>${vs.length}件</strong>を選択中（借方計 ¥${yen(total)}）</span>
     <button type="button" class="sub" id="sel-prev">選んだ分をプレビュー</button>
+    <button type="button" class="sub" id="sel-print">選んだ分を印刷</button>
     <button type="button" class="sub" id="sel-edit">順に修正</button>
     <button type="button" class="sub" id="sel-biz">事業にする</button>
     <button type="button" class="sub" id="sel-life">生活にする</button>
@@ -898,6 +903,7 @@ function drawSelBar() {
     <button type="button" class="sub" id="sel-clear">選択を解除</button>`;
   $("sel-clear").addEventListener("click", () => { sel.clear(); lastSelId = null; drawList(); });
   $("sel-prev").addEventListener("click", previewSelected);
+  $("sel-print").addEventListener("click", printSelectedOnly);
   $("sel-edit").addEventListener("click", editSelected);
   $("sel-del").addEventListener("click", deleteSelected);
   $("sel-biz").addEventListener("click", () => retagSelected("biz"));
@@ -1062,7 +1068,7 @@ function voucherRows(vo, alt, check) {
   let html = "";
   for (let i = 0; i < n; i++) {
     const first = i === 0;
-    html += `<tr data-vid="${esc(vo.id)}" class="${cls}${first ? " v1" : ""}">
+    html += `<tr data-vid="${esc(vo.id)}" class="${cls}${first ? " v1" : ""}${i < n - 1 ? " cont" : ""}">
       ${check ? `<td class="chk">${first ? `<input type="checkbox" aria-label="この仕訳を選ぶ"${sel.has(vo.id) ? " checked" : ""}>` : ""}</td>` : ""}
       <td class="num muted ${multi && first ? "first" : ""}">${first ? esc(vo.month + "-" + vo.seq) : ""}</td>
       <td>${(() => { const l = debits[i] || credits[i] || {}; return multi || first ? (l.tax ? esc(l.tax) + "%" : "ー") : ""; })()}</td>

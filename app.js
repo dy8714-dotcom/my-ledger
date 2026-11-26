@@ -1,15 +1,16 @@
 // マイ帳簿サイト（ログインと、メニューの切り替え）
 import { GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged }
   from "https://www.gstatic.com/firebasejs/13.4.0/firebase-auth.js";
-import { auth, state, loadAll, loadVouchers } from "./state.js?v=0.2I6c";
-import { $, esc, showError } from "./util.js?v=0.2I6c";
-import { renderSettings } from "./settings.js?v=0.2I6c";
-import { renderEntry } from "./entry.js?v=0.2I6c";
-import { renderTrial } from "./trial.js?v=0.2I6c";
-import { renderLedger } from "./ledger.js?v=0.2I6c";
-import { renderBS, renderPL } from "./statements.js?v=0.2I6c";
-import { renderMonthEnd } from "./monthend.js?v=0.2I6c";
-import { renderBackupBanner } from "./backup.js?v=0.2I6c";
+import { auth, state, loadAll, loadVouchers } from "./state.js?v=0.2I6d";
+import { $, esc, showError } from "./util.js?v=0.2I6d";
+import { renderSettings } from "./settings.js?v=0.2I6d";
+import { renderEntry } from "./entry.js?v=0.2I6d";
+import { renderTrial } from "./trial.js?v=0.2I6d";
+import { renderLedger } from "./ledger.js?v=0.2I6d";
+import { renderBS, renderPL } from "./statements.js?v=0.2I6d";
+import { renderMonthEnd } from "./monthend.js?v=0.2I6d";
+import { renderBackupBanner } from "./backup.js?v=0.2I6d";
+import "./print.js?v=0.2I6d";
 
 $("btn-login").addEventListener("click", async () => {
   showError("");
