@@ -74,7 +74,7 @@ main { max-width: 1280px; }
 .panel-head input[type="search"] { padding: 6px 10px; border: 1px solid #aaa; border-radius: 6px; width: 220px; }
 
 .vgrid { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 8px; align-items: end; }
-.vgrid .c3 { grid-column: span 3; } .vgrid .c1 { grid-column: span 1; } .vgrid .c2 { grid-column: span 2; } .vgrid .c7 { grid-column: span 7; }
+.vgrid .c3 { grid-column: span 3; } .vgrid .c1 { grid-column: span 1; } .vgrid .c2 { grid-column: span 2; } .vgrid .c7 { grid-column: span 7; } .vgrid .c5 { grid-column: span 5; }
 .in { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
 .in label { font-size: 12px; color: #4b5260; font-weight: bold; }
 .in input[type="text"], .in input[type="date"], .in select, .in .box {

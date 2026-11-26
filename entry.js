@@ -1,15 +1,15 @@
 // 記帳画面（入力欄と仕訳の一覧）
-import { state, col, db, loadParties, loadVouchers, fetchMonthVouchers } from "./state.js?v=0.2I6b";
-import { downloadFullBackup } from "./backup.js?v=0.2I6b";
-import { renderDeprBanner, askDeprChange, afterDeprEdit } from "./assets.js?v=0.2I6b";
-import { askClosedConfirm } from "./monthend.js?v=0.2I6b";
-import { isClosed } from "./state.js?v=0.2I6b";
+import { state, col, db, loadParties, loadVouchers, fetchMonthVouchers } from "./state.js?v=0.2I6c";
+import { downloadFullBackup } from "./backup.js?v=0.2I6c";
+import { renderDeprBanner, askDeprChange, afterDeprEdit } from "./assets.js?v=0.2I6c";
+import { askClosedConfirm } from "./monthend.js?v=0.2I6c";
+import { isClosed } from "./state.js?v=0.2I6c";
 import { $, esc, norm, hk, yen, parseAmount, WD, ymd, monthOf, shiftMonth, firstDayOf, accChip, openModal, closeModal }
-  from "./util.js?v=0.2I6b";
-import { createCombo } from "./combo.js?v=0.2I6b";
+  from "./util.js?v=0.2I6c";
+import { createCombo } from "./combo.js?v=0.2I6c";
 import { doc, setDoc, updateDoc, deleteDoc, writeBatch, serverTimestamp, increment, arrayUnion, deleteField }
   from "https://www.gstatic.com/firebasejs/13.4.0/firebase-firestore.js";
-import { patternsOf, sortPatterns, describePattern, addPattern, fromTemplate } from "./patterns.js?v=0.2I6b";
+import { patternsOf, sortPatterns, describePattern, addPattern, fromTemplate } from "./patterns.js?v=0.2I6c";
 
 // ---------- 候補の作り方 ----------
 const isBlank = (a) => a.name.startsWith("（") || a.name === "ー";
@@ -112,7 +112,8 @@ function mountVoucherForm(root, { voucher = null, onSaved, onCancel, onDeleted }
         <select data-k="biz"><option value="life">生活</option><option value="biz">事業</option><option value="split">按分</option></select></div>
       <div class="in c1"><label>印</label>
         <select data-k="mark"><option value="">ー</option><option>☆</option><option>★</option><option>◆</option><option>◇</option></select></div>
-      <div class="in c3" data-k="bizamtwrap" hidden><label>うち事業分の金額（残りは生活）</label><input type="text" inputmode="numeric" data-k="bizamt" class="amt" autocomplete="off"></div>
+      <div class="in c3" data-k="bizamtwrap" hidden><label>事業にする側の金額（残りが生活）</label><input type="text" inputmode="numeric" data-k="bizamt" class="amt" autocomplete="off"></div>
+      <div class="in c5" data-k="bizmemowrap" hidden><label>生活のほうの摘要（空なら上の摘要と同じ）</label><input type="text" data-k="bizmemo" autocomplete="off"></div>
     </div>
     <div class="patbar" data-k="patbar" hidden></div>
     <div class="lines" data-k="lines" hidden>
@@ -125,6 +126,7 @@ function mountVoucherForm(root, { voucher = null, onSaved, onCancel, onDeleted }
       <label class="remember" data-k="rememberwrap" hidden><input type="checkbox" data-k="remember"> <span data-k="rememberlabel"></span></label>
       <button type="button" class="sub" data-k="addline">＋ 行を追加</button>
       ${isEdit ? "" : '<button type="button" class="sub" data-k="preview">プレビュー</button>'}
+      ${isEdit ? "" : '<button type="button" class="sub" data-k="clear" title="入力した内容を全部消して、最初の状態に戻します">入力を全部消す</button>'}
       ${isEdit ? '<button type="button" class="sub" data-k="cancel">キャンセル</button>' : ""}
       ${isEdit ? '<button type="button" class="danger" data-k="delete">削除</button>' : ""}
       <span class="vmsg" data-k="msg"></span>
@@ -134,6 +136,7 @@ function mountVoucherForm(root, { voucher = null, onSaved, onCancel, onDeleted }
   const dateEl = q("date"), seqEl = q("seq"), taxEl = q("tax"), memoEl = q("memo");
   const amountEl = q("amount"), markEl = q("mark"), msgEl = q("msg"), saveBtn = q("save");
   const bizEl = q("biz"), bizAmtEl = q("bizamt"), bizAmtWrap = q("bizamtwrap");
+  const bizMemoEl = q("bizmemo"), bizMemoWrap = q("bizmemowrap");
   const simpleEls = root.querySelectorAll(".simple");
   const patbar = q("patbar"), rememberEl = q("remember"), rememberWrap = q("rememberwrap"), rememberLabel = q("rememberlabel");
   const linesBox = q("lines"), rowsHost = q("linerows"), balanceEl = q("balance");
@@ -172,11 +175,12 @@ function mountVoucherForm(root, { voucher = null, onSaved, onCancel, onDeleted }
     updateBizUI();
   }
   function updateBizUI() {
-    bizAmtWrap.hidden = detail || bizEl.value !== "split";
+    bizAmtWrap.hidden = bizMemoWrap.hidden = detail || bizEl.value !== "split";
   }
   const onAcc = () => { defaultTax(); defaultBiz(); };
   bizEl.addEventListener("change", () => { bizTouched = true; updateBizUI(); if (bizEl.value === "split") bizAmtEl.focus(); });
-  bizAmtEl.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); save(); } });
+  bizAmtEl.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); bizMemoEl.focus(); } });
+  bizMemoEl.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); save(); } });
 
   const order = () => [dateEl, taxEl, debit.input, credit.input, field.input, party.input, memoEl, amountEl, markEl];
   function focusNext(el) {
@@ -399,6 +403,7 @@ function mountVoucherForm(root, { voucher = null, onSaved, onCancel, onDeleted }
 
   q("addline").addEventListener("click", addLine);
   if (!isEdit) q("preview").addEventListener("click", preview);
+  if (!isEdit) q("clear").addEventListener("click", () => { msgEl.textContent = ""; resetForNext(); });
   root.addEventListener("keydown", (e) => {
     if (e.ctrlKey && e.key === "ArrowDown") { e.preventDefault(); addLine(); }
   });
@@ -450,7 +455,7 @@ function mountVoucherForm(root, { voucher = null, onSaved, onCancel, onDeleted }
     debit.clear(); credit.clear(); field.clear(); party.clear();
     memoEl.value = ""; amountEl.value = ""; markEl.value = "";
     taxEl.value = "0"; taxTouched = false;
-    bizEl.value = "life"; bizAmtEl.value = ""; bizTouched = false; updateBizUI();
+    bizEl.value = "life"; bizAmtEl.value = ""; bizMemoEl.value = ""; bizTouched = false; updateBizUI();
     dateEl.value = defaultDate();
     updateSeq();
     refreshParty(party.getValue(), true);
@@ -476,7 +481,7 @@ function mountVoucherForm(root, { voucher = null, onSaved, onCancel, onDeleted }
           const b = parseAmount(bizAmtEl.value);
           if (!(b > 0 && b < amount)) return { error: "按分のときは、事業分の金額を、1円以上で合計より小さい数字で入れてください。" };
           out.push({ side, accId, amount: b, tax, memo: m, tags: [], biz: "biz" },
-            { side, accId, amount: amount - b, tax, memo: m, tags: [], biz: "life" });
+            { side, accId, amount: amount - b, tax, memo: bizMemoEl.value.trim() || m, tags: [], biz: "life" });
         } else {
           out.push({ side, accId, amount, tax, memo: m, tags: [], biz: mode === "biz" ? "biz" : "life" });
         }

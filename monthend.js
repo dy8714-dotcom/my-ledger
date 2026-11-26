@@ -1,8 +1,8 @@
 // 月末（手順I3）：金融資産の評価替え
-import { state, col, db, loadAllVouchers, loadVouchers, fetchMonthVouchers, loadClosings, isClosed, loadAssets } from "./state.js?v=0.2I6b";
-import { pendingDrafts } from "./assets.js?v=0.2I6b";
-import { downloadFullBackup, makeCopy } from "./backup.js?v=0.2I6b";
-import { $, esc, yen, ymd, hk, shiftMonth, monthOf, WD, showError } from "./util.js?v=0.2I6b";
+import { state, col, db, loadAllVouchers, loadVouchers, fetchMonthVouchers, loadClosings, isClosed, loadAssets } from "./state.js?v=0.2I6c";
+import { pendingDrafts } from "./assets.js?v=0.2I6c";
+import { downloadFullBackup, makeCopy } from "./backup.js?v=0.2I6c";
+import { $, esc, yen, ymd, hk, shiftMonth, monthOf, WD, showError } from "./util.js?v=0.2I6c";
 import { doc, getDocs, writeBatch, setDoc, deleteField, serverTimestamp, arrayUnion } from "https://www.gstatic.com/firebasejs/13.4.0/firebase-firestore.js";
 
 const EVAL_NOS = [26, 27, 28, 29, 30]; // 評価替えの対象（金融資産）
@@ -240,6 +240,9 @@ async function renderClose(view) {
     .filter((a) => !vals.some((x) => x.id === `${a.id}_${end}`) && !all.some((v) => v.id === evalId(a.id, month)));
   const manual = (me.manual = me.manual && me.manual.month === month ? me.manual : { month, recurring: false, points: false });
   const okBal = dr === cr && bad === 0;
+  // 現金・預金（電子マネーなど）が月末にマイナスのまま残っていないか
+  const negCash = state.accounts.filter((a) => a.kind === "asset" && a.category === "現金・預金" && (now[a.id] || 0) < 0);
+  const okNeg = negCash.length === 0;
   const okDep = drafts.length === 0, okEval = evalMiss.length === 0;
   const mark = (ok) => (ok ? `<span class="ok">✓</span>` : `<span class="ng">⚠</span>`);
   const changed = closed ? diffBalances(closing.balances, now) : [];
@@ -257,6 +260,7 @@ async function renderClose(view) {
         <tr><td>${mark(okDep)}</td><td>月割り償却の仕訳を登録した</td><td class="note">${okDep ? "未計上なし" : `未計上が${drafts.length}件あります（記帳画面の上の「確認する」から登録）`}</td></tr>
         <tr><td>${mark(okEval)}</td><td>金融資産の評価替えをした</td><td class="note">${okEval ? "残高のある科目はすべて入力済み" : `未入力：${evalMiss.map((a) => esc(a.no + a.name)).join("、")}（「評価替え」タブ）`}</td></tr>
         <tr><td><input type="checkbox" id="cl-m2" ${manual.points ? "checked" : ""} ${closed ? "disabled" : ""}></td><td>ポイントの残高合わせ（任意）</td><td class="note">残高合わせの機能はまだないので、必要なら手で記帳してチェックします</td></tr>
+        <tr><td>${mark(okNeg)}</td><td>現金・預金・電子マネーがマイナスになっていない</td><td class="note">${okNeg ? "マイナスの科目なし" : `月末にマイナス：${negCash.map((a) => esc(a.no + a.name) + " ¥" + yen(now[a.id])).join("、")}（チャージなどの記帳漏れがないか確認）`}</td></tr>
         <tr><td>${mark(okBal)}</td><td>貸借が一致している</td><td class="note">借方計 ¥${yen(dr)}／貸方計 ¥${yen(cr)}${bad ? `（借方と貸方が合わない仕訳が${bad}件）` : ""}</td></tr>
       </tbody></table></div>
       ${closed && me.justClosed === month ? `<div class="askbox" id="cl-bk"><p><strong>${esc(month)}月度を締めました。</strong>${esc(me.copyNote || "")}いまの全データをバックアップ（PCにJSONファイルを保存）しますか？</p>
@@ -293,6 +297,7 @@ async function renderClose(view) {
     if (!manual.recurring) miss.push("定期支払の確認");
     if (!okDep) miss.push("月割り償却");
     if (!okEval) miss.push("評価替え");
+    if (!okNeg) miss.push("現金・預金のマイナス");
     if (!okBal) miss.push("貸借の一致");
     if (miss.length && !window.confirm(`次の項目がそろっていません：${miss.join("、")}\nそれでも締めますか？`)) return;
     $("cl-close").disabled = true;
