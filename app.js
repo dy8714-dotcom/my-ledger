@@ -1,17 +1,17 @@
 // マイ帳簿サイト（ログインと、メニューの切り替え）
 import { GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged }
   from "https://www.gstatic.com/firebasejs/13.4.0/firebase-auth.js";
-import { auth, state, loadAll, loadVouchers } from "./state.js?v=0.2I8c";
-import { $, esc, showError } from "./util.js?v=0.2I8c";
-import { renderSettings } from "./settings.js?v=0.2I8c";
-import { renderEntry } from "./entry.js?v=0.2I8c";
-import { renderTrial } from "./trial.js?v=0.2I8c";
-import { renderLedger } from "./ledger.js?v=0.2I8c";
-import { renderBS, renderPL } from "./statements.js?v=0.2I8c";
-import { renderBreakdown, refreshHeaderCheck } from "./breakdown.js?v=0.2I8c";
-import { renderMonthEnd } from "./monthend.js?v=0.2I8c";
-import { renderBackupBanner } from "./backup.js?v=0.2I8c";
-import "./print.js?v=0.2I8c";
+import { auth, state, loadAll, loadVouchers } from "./state.js?v=0.2I8d";
+import { $, esc, showError } from "./util.js?v=0.2I8d";
+import { renderSettings } from "./settings.js?v=0.2I8d";
+import { renderEntry } from "./entry.js?v=0.2I8d";
+import { renderTrial } from "./trial.js?v=0.2I8d";
+import { renderLedger } from "./ledger.js?v=0.2I8d";
+import { renderBS, renderPL } from "./statements.js?v=0.2I8d";
+import { renderBreakdown, refreshHeaderCheck } from "./breakdown.js?v=0.2I8d";
+import { renderMonthEnd } from "./monthend.js?v=0.2I8d";
+import { renderBackupBanner } from "./backup.js?v=0.2I8d";
+import "./print.js?v=0.2I8d";
 
 $("btn-login").addEventListener("click", async () => {
   showError("");

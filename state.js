@@ -105,6 +105,13 @@ export async function loadOpenings() {
   return state.openings;
 }
 
+// 月末の内訳（商品券・ポイント・その他銀行・金融資産）。meta/snapshots に {items:[{key, month, label, qty, amount}]}
+export async function loadSnapshots() {
+  const snap = await getDoc(doc(col("meta"), "snapshots"));
+  state.snapshots = snap.exists() ? snap.data().items || [] : [];
+  return state.snapshots;
+}
+
 export async function loadAssets() {
   state.assets = toList(await getDocs(col("assets"))).sort((x, y) => (x.acquiredDate || "") < (y.acquiredDate || "") ? -1 : 1);
   return state.assets;
@@ -133,6 +140,7 @@ export async function loadAll() {
   try { await loadClosings(); } catch (err) { console.error("[月次締め] 読み込み失敗", err); state.closings = []; }
   try { await loadRecurring(); } catch (err) { console.error("[定期支払] 読み込み失敗", err); state.recurring = []; }
   try { await loadOpenings(); } catch (err) { console.error("[期首の内訳] 読み込み失敗", err); state.openings = []; }
+  try { await loadSnapshots(); } catch (err) { console.error("[月末の内訳] 読み込み失敗", err); state.snapshots = []; }
   try { await loadAssets(); } catch (err) { console.error("[月割り償却] 読み込み失敗", err); state.assets = []; }
 }
 

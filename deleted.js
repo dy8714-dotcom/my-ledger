@@ -1,7 +1,7 @@
 // 設定の「削除した仕訳」：1件の削除は「削除済み」として残し、30日間は戻せる
-import { state, loadDeletedVouchers, loadVouchers, RESTORE_DAYS } from "./state.js?v=0.2I8c";
-import { $, esc, yen, hk, showError } from "./util.js?v=0.2I8c";
-import { col } from "./state.js?v=0.2I8c";
+import { state, loadDeletedVouchers, loadVouchers, RESTORE_DAYS } from "./state.js?v=0.2I8d";
+import { $, esc, yen, hk, showError } from "./util.js?v=0.2I8d";
+import { col } from "./state.js?v=0.2I8d";
 import { doc, updateDoc, deleteField, serverTimestamp } from "https://www.gstatic.com/firebasejs/13.4.0/firebase-firestore.js";
 
 const DAY = 24 * 60 * 60 * 1000;

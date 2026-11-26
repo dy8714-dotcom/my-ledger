@@ -1,8 +1,8 @@
 // バックアップ（手順G）：全データのJSON、仕訳のCSV
-import { state, col, db, loadAll, loadVouchers, loadAllVouchers } from "./state.js?v=0.2I8c";
-import { $, esc, ymd, showError, openModal, closeModal } from "./util.js?v=0.2I8c";
+import { state, col, db, loadAll, loadVouchers, loadAllVouchers } from "./state.js?v=0.2I8d";
+import { $, esc, ymd, showError, openModal, closeModal } from "./util.js?v=0.2I8d";
 import { collection, getDocs, getDoc, setDoc, deleteDoc, writeBatch, doc } from "https://www.gstatic.com/firebasejs/13.4.0/firebase-firestore.js";
-import { requestToken, saveToDrive, KEEP_FILES } from "./drive.js?v=0.2I8c";
+import { requestToken, saveToDrive, KEEP_FILES } from "./drive.js?v=0.2I8d";
 
 export function saveFile(text, filename, mime, bom) {
   const blob = new Blob([(bom ? "﻿" : "") + text], { type: mime });
@@ -31,7 +31,7 @@ export async function dumpAll() {
     out[name] = snap.docs.map((d) => ({ id: d.id, ...plain(d.data()) }));
   }
   out.meta = {};
-  for (const id of ["stats", "searches", "openings"]) {
+  for (const id of ["stats", "searches", "openings", "snapshots"]) {
     const s = await getDoc(doc(col("meta"), id));
     if (s.exists()) out.meta[id] = plain(s.data());
   }
