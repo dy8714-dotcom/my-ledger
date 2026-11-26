@@ -348,3 +348,18 @@ details.lump summary { cursor: pointer; font-weight: bold; }
 .late-txt { color: #874607; font-weight: bold; }
 tr.off td { color: #8a8f99; background: #f3f1ec; }
 @media print { .rcbanner { display: none !important; } }
+
+/* 貸借内訳（I8a） */
+.hdrcheck { font-size: 12px; margin-right: 10px; cursor: pointer; }
+.hdrcheck .hc-ok { color: #b9f0c8; }
+.hdrcheck .hc-ng { color: #ffd9a8; font-weight: 700; }
+.hdrcheck .hc-off { opacity: .7; }
+.bkgrp { border: 1px solid var(--line, #ddd6c8); border-radius: 8px; margin-bottom: 8px; background: #fff; overflow: hidden; }
+.bkhead { display: flex; justify-content: space-between; width: 100%; background: transparent; border: 0; padding: 9px 12px; font: inherit; cursor: pointer; text-align: left; }
+.bkhead:hover { background: #f6f2e9; }
+.bkarrow { display: inline-block; transition: transform .1s; }
+.bkgrp:not(.bkclosed) .bkarrow { transform: rotate(90deg); }
+.bkclosed .bkbody { display: none; }
+.bk-ok { color: #1b6431; } .bk-ng { color: #a3410a; font-weight: 700; }
+.bk-warnrow td { background: #fff4e6; color: #874607; }
+@media print { .bkclosed .bkbody { display: block !important; } .bkhead { padding: 4px 6px; } .bkgrp { break-inside: avoid; } .hdrcheck { display: none; } .monthbar .sub { display: none; } }

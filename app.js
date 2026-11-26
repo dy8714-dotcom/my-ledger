@@ -1,16 +1,17 @@
 // マイ帳簿サイト（ログインと、メニューの切り替え）
 import { GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged }
   from "https://www.gstatic.com/firebasejs/13.4.0/firebase-auth.js";
-import { auth, state, loadAll, loadVouchers } from "./state.js?v=0.2I7c";
-import { $, esc, showError } from "./util.js?v=0.2I7c";
-import { renderSettings } from "./settings.js?v=0.2I7c";
-import { renderEntry } from "./entry.js?v=0.2I7c";
-import { renderTrial } from "./trial.js?v=0.2I7c";
-import { renderLedger } from "./ledger.js?v=0.2I7c";
-import { renderBS, renderPL } from "./statements.js?v=0.2I7c";
-import { renderMonthEnd } from "./monthend.js?v=0.2I7c";
-import { renderBackupBanner } from "./backup.js?v=0.2I7c";
-import "./print.js?v=0.2I7c";
+import { auth, state, loadAll, loadVouchers } from "./state.js?v=0.2I8a";
+import { $, esc, showError } from "./util.js?v=0.2I8a";
+import { renderSettings } from "./settings.js?v=0.2I8a";
+import { renderEntry } from "./entry.js?v=0.2I8a";
+import { renderTrial } from "./trial.js?v=0.2I8a";
+import { renderLedger } from "./ledger.js?v=0.2I8a";
+import { renderBS, renderPL } from "./statements.js?v=0.2I8a";
+import { renderBreakdown, refreshHeaderCheck } from "./breakdown.js?v=0.2I8a";
+import { renderMonthEnd } from "./monthend.js?v=0.2I8a";
+import { renderBackupBanner } from "./backup.js?v=0.2I8a";
+import "./print.js?v=0.2I8a";
 
 $("btn-login").addEventListener("click", async () => {
   showError("");
@@ -40,6 +41,8 @@ onAuthStateChanged(auth, async (user) => {
   }
 });
 
+$("hdr-check").addEventListener("click", () => { if (state.user) document.querySelector('#nav [data-tab="breakdown"]').click(); });
+
 $("nav").addEventListener("click", (e) => {
   const b = e.target.closest("button[data-tab]");
   if (!b) return;
@@ -51,13 +54,11 @@ $("nav").addEventListener("click", (e) => {
 function render() {
   document.querySelectorAll("#nav button").forEach((b) =>
     b.classList.toggle("active", b.dataset.tab === state.tab));
-  if (state.tab === "entry") return renderEntry();
-  if (state.tab === "trial") return renderTrial();
-  if (state.tab === "bs") return renderBS();
-  if (state.tab === "pl") return renderPL();
-  if (state.tab === "ledger") return renderLedger();
-  if (state.tab === "monthend") return renderMonthEnd();
-  if (state.tab === "settings") return renderSettings();
+  const fn = { entry: renderEntry, trial: renderTrial, bs: renderBS, pl: renderPL, breakdown: renderBreakdown, ledger: renderLedger, monthend: renderMonthEnd, settings: renderSettings }[state.tab];
+  if (fn) {
+    refreshHeaderCheck();
+    return Promise.resolve(fn()).then(() => refreshHeaderCheck(), () => {});
+  }
   const names = { trial: "試算表", ledger: "元帳・検索" };
   $("view").innerHTML =
     `<div class="placeholder">「${esc(names[state.tab])}」は、このあとの手順で作ります。</div>`;

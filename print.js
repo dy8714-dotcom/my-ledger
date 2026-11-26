@@ -1,8 +1,8 @@
 // 印刷の整備（I6d）：どの画面でも、ブラウザの「印刷」（Ctrl+P）でA4にきれいに出す
-import { $ } from "./util.js?v=0.2I7c";
-import { state } from "./state.js?v=0.2I7c";
+import { $ } from "./util.js?v=0.2I8a";
+import { state } from "./state.js?v=0.2I8a";
 
-const TAB = { entry: "記帳", trial: "試算表", bs: "B/S（貸借対照表）", pl: "P/L（損益計算書）", ledger: "元帳・検索", monthend: "月末", settings: "設定" };
+const TAB = { entry: "記帳", trial: "試算表", bs: "B/S（貸借対照表）", pl: "P/L（損益計算書）", breakdown: "貸借内訳", ledger: "元帳・検索", monthend: "月末", settings: "設定" };
 let selOnly = false;
 
 // 記帳画面：チェックを付けた仕訳だけを印刷する

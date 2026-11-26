@@ -4,14 +4,15 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>マイ帳簿サイト</title>
-<link rel="stylesheet" href="style.css?v=0.2I7c">
+<link rel="stylesheet" href="style.css?v=0.2I8a">
 </head>
 <body>
 <header>
   <h1>マイ帳簿サイト</h1>
   <div class="header-right">
+    <span id="hdr-check" class="hdrcheck"></span>
     <span id="user-email" class="user"></span>
-    <span id="version" class="version">v0.2（手順I7c：Googleドライブ保存）</span>
+    <span id="version" class="version">v0.2（手順I8a：貸借内訳）</span>
     <button id="btn-logout" type="button" class="header-btn" hidden>ログアウト</button>
   </div>
 </header>
@@ -21,6 +22,7 @@
   <button type="button" data-tab="trial">試算表</button>
   <button type="button" data-tab="bs">B/S</button>
   <button type="button" data-tab="pl">P/L</button>
+  <button type="button" data-tab="breakdown">貸借内訳</button>
   <button type="button" data-tab="ledger">元帳・検索</button>
   <button type="button" data-tab="monthend">月末</button>
   <button type="button" data-tab="settings">設定</button>
@@ -39,6 +41,6 @@
 
 <div id="modal" hidden></div>
 
-<script type="module" src="app.js?v=0.2I7c"></script>
+<script type="module" src="app.js?v=0.2I8a"></script>
 </body>
 </html>
