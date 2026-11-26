@@ -1,8 +1,8 @@
 // 貸借内訳（9章・I8a）：科目の残高と、内訳（取引先ごと・固定資産ごと）の合計を照合する
-import { state, col, loadAllVouchers, loadAssets } from "./state.js?v=0.2I8e";
-import { $, esc, yen, shiftMonth, showError, openModal, closeModal } from "./util.js?v=0.2I8e";
+import { state, col, loadAllVouchers, loadAssets } from "./state.js?v=0.2I9a";
+import { $, esc, yen, shiftMonth, showError, openModal, closeModal } from "./util.js?v=0.2I9a";
 import { setDoc, doc } from "https://www.gstatic.com/firebasejs/13.4.0/firebase-firestore.js";
-import { bsAt } from "./statements.js?v=0.2I8e";
+import { bsAt } from "./statements.js?v=0.2I9a";
 
 const idxOf = (m) => { const [y, mm] = m.split(".").map((x) => parseInt(x, 10)); return y * 12 + (mm - 1); };
 const labelOf = (idx) => `${2000 + Math.floor(idx / 12)}年${(idx % 12) + 1}月`;
@@ -240,7 +240,7 @@ function openOpening(g, redraw) {
     <h2>基準月末の内訳　${esc(g.title)}</h2>
     <p class="note">${g.fixed ? "資産として登録していない分を、品名ごとに分けて入れます。" : "基準月末に実際に残っている分を、取引先ごとに入れます（基準月以前の取引先別の履歴は数えません）。"}仕訳そのものは変わりません。</p>
     <p class="note">振り分ける対象：<strong>${yen(base)}</strong>　／　入力した合計：<strong id="op-sum">0</strong>　／　残り：<strong id="op-rest">0</strong></p>
-    <table class="tbl"><thead><tr><th>${g.fixed ? "品名" : "取引先"}</th><th>金額（円）</th><th></th></tr></thead><tbody id="op-rows">${(mine.length ? mine : [{}]).map(rowHtml).join("")}</tbody></table>
+    <table class="tbl mtbl"><colgroup><col style="width:62%"><col style="width:30%"><col style="width:8%"></colgroup><thead><tr><th>${g.fixed ? "品名" : "取引先"}</th><th>金額（円）</th><th></th></tr></thead><tbody id="op-rows">${(mine.length ? mine : [{}]).map(rowHtml).join("")}</tbody></table>
     <p><button type="button" class="sub" id="op-add">＋ 行を追加</button></p>
     <p class="note" id="op-msg"></p>
     <div class="actions"><button type="button" class="sub" id="op-cancel">閉じる</button><button type="button" class="primary" id="op-save">保存</button></div></div>`);
@@ -291,7 +291,7 @@ function openSnapshot(g, redraw) {
     <h2>月末の内訳　${esc(g.title)}　${esc(mkey)}月度末</h2>
     <p class="note">${esc(g.mkey)}月度末の内訳を、${esc(g.labelName)}ごとに入れます。${U ? `「1${esc(U)}の金額 × ${esc(U)}数」が小計になります。` : ""}仕訳は変わりません。</p>
     <p class="note">科目の残高：<strong>${yen(g.bal)}</strong>　／　入力した合計：<strong id="sn-sum">0</strong>　／　残り：<strong id="sn-rest">0</strong>${U ? `　／　${esc(U)}数の合計：<strong id="sn-qsum">0</strong>` : ""}</p>
-    <table class="tbl" style="table-layout:fixed;width:100%">${cg}<thead><tr><th>${esc(g.labelName)}</th>${U ? `<th class="r">1${esc(U)}の金額</th><th class="r">${esc(U)}数</th><th class="r">小計</th>` : `<th class="r">金額（円）</th>`}<th></th></tr></thead><tbody id="sn-rows">${(mine.length ? mine : [{}]).map(rowHtml).join("")}</tbody></table>
+    <table class="tbl mtbl">${cg}<thead><tr><th>${esc(g.labelName)}</th>${U ? `<th class="r">1${esc(U)}の金額</th><th class="r">${esc(U)}数</th><th class="r">小計</th>` : `<th class="r">金額（円）</th>`}<th></th></tr></thead><tbody id="sn-rows">${(mine.length ? mine : [{}]).map(rowHtml).join("")}</tbody></table>
     <p><button type="button" class="sub" id="sn-add">＋ 行を追加</button>${prev.length ? ` <button type="button" class="sub" id="sn-copy">${esc(prevMonths[0])}月度末の内容をコピー</button>` : ""}</p>
     <p class="note" id="sn-msg"></p>
     <div class="actions"><button type="button" class="sub" id="sn-cancel">閉じる</button><button type="button" class="primary" id="sn-save">保存</button></div></div>`);

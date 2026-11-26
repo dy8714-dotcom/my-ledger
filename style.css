@@ -365,3 +365,13 @@ tr.off td { color: #8a8f99; background: #f3f1ec; }
 @media print { .bkclosed .bkbody { display: block !important; } .bkhead { padding: 4px 6px; } .bkgrp { break-inside: avoid; } .hdrcheck { display: none; } .monthbar .sub { display: none; } }
 .bkact { padding: 8px 10px 0; text-align: right; }
 @media print { .bkact { display: none; } }
+/* 入力ポップアップの表は、画面幅に収める（.tbl の最小幅1050pxを打ち消す） */
+.dialog .mtbl { min-width: 0 !important; width: 100%; table-layout: fixed; }
+.dialog .mtbl th, .dialog .mtbl td { white-space: normal; padding: 6px 6px; }
+.dialog .mtbl input[type="text"] { padding: 6px 8px; font-size: 14px; }
+
+/* C/F（I9a） */
+.linkbtn { background: none; border: none; padding: 0; font: inherit; color: inherit; cursor: pointer; text-align: left; }
+.linkbtn:hover { text-decoration: underline; }
+.cft tr.sat td:first-child { color: #1a4fb5; } .cft tr.sun td:first-child { color: #b32121; }
+@media print { .cf-tog { pointer-events: none; } #cf-sub, #cf-csv, #cf-print { display: none; } }
