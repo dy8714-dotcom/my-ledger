@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>マイ帳簿サイト</title>
-<link rel="stylesheet" href="style.css?v=0.2I11a">
+<link rel="stylesheet" href="style.css?v=0.2I11b">
 </head>
 <body>
 <header>
@@ -12,7 +12,7 @@
   <div class="header-right">
     <span id="hdr-check" class="hdrcheck"></span>
     <span id="user-email" class="user"></span>
-    <span id="version" class="version">v0.2（手順I11a：仕訳の種別）</span>
+    <span id="version" class="version">v0.2（手順I11b：給与入力）</span>
     <button id="btn-logout" type="button" class="header-btn" hidden>ログアウト</button>
   </div>
 </header>
@@ -27,6 +27,7 @@
   <button type="button" data-tab="breakdown">貸借内訳</button>
   <button type="button" data-tab="ledger">元帳・検索</button>
   <button type="button" data-tab="monthend">月末</button>
+  <button type="button" data-tab="salary">給与</button>
   <button type="button" data-tab="settings">設定</button>
 </nav>
 
@@ -43,6 +44,6 @@
 
 <div id="modal" hidden></div>
 
-<script type="module" src="app.js?v=0.2I11a"></script>
+<script type="module" src="app.js?v=0.2I11b"></script>
 </body>
 </html>

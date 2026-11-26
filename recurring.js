@@ -1,9 +1,9 @@
 // 定期支払（I7a）：☆定額・★変動・◇年払い・◆外貨 の登録と、記帳画面の「未記帳のお知らせ」
-import { state, col, db, loadRecurring, loadAllVouchers } from "./state.js?v=0.2I11a";
-import { $, esc, hk, yen, parseAmount, ymd, monthOf, openModal, closeModal, showError } from "./util.js?v=0.2I11a";
+import { state, col, db, loadRecurring, loadAllVouchers } from "./state.js?v=0.2I11b";
+import { $, esc, hk, yen, parseAmount, ymd, monthOf, openModal, closeModal, showError } from "./util.js?v=0.2I11b";
 import { doc, setDoc, deleteDoc, writeBatch, serverTimestamp } from "https://www.gstatic.com/firebasejs/13.4.0/firebase-firestore.js";
-import { fromTemplate } from "./patterns.js?v=0.2I11a";
-import { offReason, shiftBusiness } from "./holidays.js?v=0.2I11a";
+import { fromTemplate } from "./patterns.js?v=0.2I11b";
+import { offReason, shiftBusiness } from "./holidays.js?v=0.2I11b";
 
 export const MARKS = ["☆", "★", "◇", "◆"];
 const MARK_NAME = { "☆": "定額・毎月", "★": "金額が変わる・毎月", "◇": "年払い", "◆": "外貨建て・毎月" };
@@ -102,7 +102,10 @@ export function computeEstimate(recs, vouchers, span, todayM) {
   });
   const sum = (f) => rows.reduce((x, r) => x + (f(r) || 0), 0);
   const months = rows.map((r) => r.lastMonth).filter(Boolean).sort((a, b) => mi(a) - mi(b));
-  return { rows, min: sum((r) => r.min), latest: sum((r) => r.latest), avg: sum((r) => r.avg), year: sum((r) => r.year), latestMonth: months.length ? months[months.length - 1] : "" };
+  // 表の見出しは「先月」を基準にする（今月だけ実績のある項目が1つあっても、見出しが今月分にならないように）
+  const pm = mi(todayM) - 1, prevM = `${String(Math.floor(pm / 12)).padStart(2, "0")}.${(pm % 12) + 1}`;
+  const prevMonth = months.some((m) => mi(m) === pm) ? prevM : "";
+  return { rows, min: sum((r) => r.min), latest: sum((r) => r.latest), avg: sum((r) => r.avg), year: sum((r) => r.year), latestMonth: prevMonth || (months.length ? months[months.length - 1] : "") };
 }
 
 export function monthStatus(recs, month, vouchers, today) {

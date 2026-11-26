@@ -1,9 +1,9 @@
 // 月末（手順I3）：金融資産の評価替え
-import { state, col, db, loadAllVouchers, loadVouchers, fetchMonthVouchers, loadClosings, isClosed, loadAssets } from "./state.js?v=0.2I11a";
-import { pendingDrafts } from "./assets.js?v=0.2I11a";
-import { monthStatus } from "./recurring.js?v=0.2I11a";
-import { downloadFullBackup, makeCopy, saveBackupToDrive } from "./backup.js?v=0.2I11a";
-import { $, esc, yen, ymd, hk, shiftMonth, monthOf, WD, showError } from "./util.js?v=0.2I11a";
+import { state, col, db, loadAllVouchers, loadVouchers, fetchMonthVouchers, loadClosings, isClosed, loadAssets } from "./state.js?v=0.2I11b";
+import { pendingDrafts } from "./assets.js?v=0.2I11b";
+import { monthStatus } from "./recurring.js?v=0.2I11b";
+import { downloadFullBackup, makeCopy, saveBackupToDrive } from "./backup.js?v=0.2I11b";
+import { $, esc, yen, ymd, hk, shiftMonth, monthOf, WD, showError } from "./util.js?v=0.2I11b";
 import { doc, getDocs, writeBatch, setDoc, deleteField, serverTimestamp, arrayUnion } from "https://www.gstatic.com/firebasejs/13.4.0/firebase-firestore.js";
 
 const EVAL_NOS = [26, 27, 28, 29, 30]; // 評価替えの対象（金融資産）

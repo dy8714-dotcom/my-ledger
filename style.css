@@ -419,3 +419,12 @@ tr.off td { color: #8a8f99; background: #f3f1ec; }
 .chip.kind-bnpl{background:#e0f5f5;color:#0e6767;border-color:#b0dcdc}
 .chip.kind-alloc{background:#f0f4e0;color:#566b0e;border-color:#d3dcae}
 .chip.kind-closing{background:#e8e8e8;color:#333;border-color:#c4c4c4}
+
+/* 給与入力（I11b） */
+.salgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px;margin-top:10px}
+.salbox{background:var(--surface-2,#fff);border:1px solid #e3ddd0;border-radius:10px;padding:10px 14px}
+.salbox h4{margin:0 0 8px;font-size:14px}
+.salg{display:grid;grid-template-columns:1fr 120px;gap:6px 10px;align-items:center;font-size:14px}
+.salg input{text-align:right;width:120px}
+.salg select{max-width:100%}
+.saltot{display:flex;justify-content:space-between;border-top:1px solid #e3ddd0;margin-top:8px;padding-top:6px;font-weight:600}
