@@ -1,7 +1,7 @@
 // 試算表（科目ごとの 月初残高・借方・貸方・残高）
-import { state, loadAllVouchers } from "./state.js?v=0.2I9b";
-import { $, esc, yen, accChip, shiftMonth, showError } from "./util.js?v=0.2I9b";
-import { CATEGORIES } from "./seed.js?v=0.2I9b";
+import { state, loadAllVouchers } from "./state.js?v=0.2I9c";
+import { $, esc, yen, accChip, shiftMonth, showError } from "./util.js?v=0.2I9c";
+import { CATEGORIES } from "./seed.js?v=0.2I9c";
 
 // "26.11" → 通し番号（月ごとに +1）
 const idxOf = (m) => { const [y, mm] = m.split(".").map((x) => parseInt(x, 10)); return y * 12 + (mm - 1); };
@@ -194,7 +194,7 @@ function draw(list) {
         <div class="panel-head"><h3><span class="bar"></span>科目ごとの残高</h3>
           <label class="note"><input type="checkbox" id="tb-hide" ${t.hideZero ? "checked" : ""}> 動きも残高もない科目を隠す</label>
           <label class="note"><input type="checkbox" id="tb-byno" ${t.byNo ? "checked" : ""}> 番号順（区分を分けない）</label></div>
-        <div class="tablewrap"><table class="tbl tb">
+        <div class="tablewrap"><table class="tbl tb${CP ? " cmpon" : ""}">
           <thead><tr><th>科目</th><th class="r">月初残高</th><th class="r">借方</th><th class="r">貸方</th><th class="r">残高</th><th class="r">増減</th>${CP ? `<th class="r">${esc(cmpTitle)}の残高</th><th class="r">残高の差</th>` : ""}</tr></thead>
           <tbody>${body}
             <tr class="tot"><td>借方合計 ＝ 貸方合計</td><td></td><td class="r num">${yen(periodDr)}</td><td class="r num">${yen(periodCr)}</td>

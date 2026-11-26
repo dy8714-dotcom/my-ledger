@@ -1,16 +1,16 @@
 // 年間の表（I9b）：1月〜12月を横に並べた P/L・試算表（損益）・C/F。印刷は横向き
-import { state, loadAllVouchers } from "./state.js?v=0.2I9b";
-import { $, esc, yen, showError } from "./util.js?v=0.2I9b";
-import { CATEGORIES } from "./seed.js?v=0.2I9b";
-import { computeTrial } from "./trial.js?v=0.2I9b";
-import { plCalc } from "./statements.js?v=0.2I9b";
-import { computeCF, CF_ROWS, cashBalance } from "./cashflow.js?v=0.2I9b";
+import { state, loadAllVouchers } from "./state.js?v=0.2I9c";
+import { $, esc, yen, showError } from "./util.js?v=0.2I9c";
+import { CATEGORIES } from "./seed.js?v=0.2I9c";
+import { computeTrial } from "./trial.js?v=0.2I9c";
+import { plCalc, bsAt, ASSET_CATS, LIAB_CATS } from "./statements.js?v=0.2I9c";
+import { computeCF, CF_ROWS, cashBalance } from "./cashflow.js?v=0.2I9c";
 
 const STAGES = [
   [1, "Ⅰ 事業"], [2, "Ⅱ 給与・その他の収入"], [3, "Ⅲ 税金・社会保険"], [4, "Ⅳ 生活費"], [5, "Ⅴ 評価・特別損益"]
 ];
 const GROUPS = [["op", "営業CF（日々のお金の出入り）", "営業CF 計"], ["inv", "投資CF（証券・仮想通貨・固定資産）", "投資CF 計"], ["fin", "財務CF（借入・返済）", "財務CF 計"]];
-const VIEWS = [["pl", "年間P/L"], ["tb", "年間試算表（損益）"], ["cf", "年間C/F"]];
+const VIEWS = [["pl", "年間P/L"], ["tb", "年間試算表（損益）"], ["cf", "年間C/F"], ["bs", "年間B/S（月末残高）"]];
 
 const num = (n) => (n === 0 ? `<span class="muted">・</span>` : (n < 0 ? "-" : "") + yen(Math.abs(n)));
 const yr = () => { if (!state.an) state.an = { year: null, view: "pl", scope: "all" }; if (!state.an.year) state.an.year = parseInt(state.month.split(".")[0], 10); return state.an; };
@@ -100,11 +100,40 @@ function buildCF(list, y) {
   return { rows };
 }
 
+function buildBS(list, y) {
+  const bs = []; for (let m = 0; m < 12; m++) bs.push(bsAt(list, state.accountsById, mIdx(y, m)));
+  const accs = state.accounts.filter((a) => !a.hidden);
+  const rows = [];
+  const last = (r) => ({ ...r, tot: r.vals[11] });
+  const mk = (label, f, cls) => last(row(label, bs.map(f), cls));
+  const items = (cat, kind) => accs.filter((a) => a.category === cat && a.kind === kind).sort((p, q) => p.no - q.no)
+    .map((a) => last(row(`${a.no} ${a.name}`, bs.map((b) => b.bal[a.id] || 0)))).filter((r) => r.vals.some((v) => v));
+  const part = (cats, kind) => cats.forEach((cat) => {
+    const rs = items(cat, kind); if (!rs.length) return;
+    rows.push(grpHtml(cat)); rows.push(...rs.map(rowHtml));
+    rows.push(rowHtml(last(row(cat + " 計", bs.map((_, i) => rs.reduce((s, r) => s + r.vals[i], 0)), "sub"))));
+  });
+  part(ASSET_CATS, "asset"); rows.push(rowHtml(mk("資産 合計", (b) => b.A, "tot")));
+  part(LIAB_CATS, "liability"); rows.push(rowHtml(mk("負債 合計", (b) => b.L, "tot")));
+  rows.push(grpHtml("純資産"));
+  accs.filter((a) => a.kind === "equity").sort((p, q) => p.no - q.no).forEach((a) => {
+    const sg = a.no === 91 ? -1 : 1; const r = last(row(`${a.no} ${a.name}`, bs.map((b) => (b.bal[a.id] || 0) * sg)));
+    if (r.vals.some((v) => v)) rows.push(rowHtml(r));
+  });
+  rows.push(rowHtml(mk("前期までの損益（繰越）", (b) => b.prev)));
+  rows.push(rowHtml(mk("当期純損益（その年の1月〜）", (b) => b.cur)));
+  rows.push(rowHtml(mk("純資産 合計", (b) => b.eq, "tot")));
+  rows.push(rowHtml(mk("負債 ＋ 純資産 合計", (b) => b.L + b.eq, "tot")));
+  const ok = bs.every((b) => b.gap === 0);
+  rows.push(`<tr class="${ok ? "sub" : "tot"}"><td class="an-l">資産 − 負債 − 純資産</td><td colspan="13" class="r">${ok ? "毎月 一致 ✓" : "合わない月：" + bs.map((b, i) => b.gap ? `${i + 1}月 ${yen(b.gap)}` : "").filter(Boolean).join("、")}</td></tr>`);
+  return { rows };
+}
+
 function draw(list) {
   const a = yr();
   const y = a.year;
-  const built = a.view === "pl" ? buildPL(list, y, a.scope) : a.view === "tb" ? buildTB(list, y, a.scope) : buildCF(list, y);
-  const scoped = a.view !== "cf";
+  const built = a.view === "pl" ? buildPL(list, y, a.scope) : a.view === "tb" ? buildTB(list, y, a.scope) : a.view === "cf" ? buildCF(list, y) : buildBS(list, y);
+  const scoped = a.view === "pl" || a.view === "tb";
   const title = VIEWS.find((v) => v[0] === a.view)[1];
   $("view").innerHTML = `
     <div class="monthbar">
@@ -118,9 +147,9 @@ function draw(list) {
       <button type="button" class="sub" id="an-print">印刷（横向き）</button>
     </div>
     <section class="panel nopad"><div class="tablewrap"><table class="tbl an">
-      <thead><tr><th class="an-l">${esc(title)}</th>${Array.from({ length: 12 }, (_, i) => `<th class="r">${i + 1}月</th>`).join("")}<th class="r">${a.view === "cf" ? "年 合計" : "合計"}</th></tr></thead>
+      <thead><tr><th class="an-l">${esc(title)}</th>${Array.from({ length: 12 }, (_, i) => `<th class="r">${i + 1}月</th>`).join("")}<th class="r">${a.view === "cf" ? "年 合計" : a.view === "bs" ? "年末" : "合計"}</th></tr></thead>
       <tbody>${built.rows.join("")}</tbody></table></div></section>
-    <p class="note">${a.view === "cf" ? "月末の現金・預金の「合計」欄は、その年の12月末の残高です。" : "金額は、収益はプラス・経費もプラスで表します（P/Lの見方と同じです）。"}　数字がない（・）月は動きがありません。</p>`;
+    <p class="note">${a.view === "bs" ? "各月の月末時点の残高です。右端の「年末」は12月末の残高です。" : a.view === "cf" ? "月末の現金・預金の「合計」欄は、その年の12月末の残高です。" : "金額は、収益はプラス・経費もプラスで表します（P/Lの見方と同じです）。"}　数字がない（・）月は動きがありません。</p>`;
   $("view").dataset.orient = "landscape";
   $("an-prev").addEventListener("click", () => { a.year--; draw(list); });
   $("an-next").addEventListener("click", () => { a.year++; draw(list); });

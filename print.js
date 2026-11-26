@@ -1,6 +1,6 @@
 // 印刷の整備（I6d）：どの画面でも、ブラウザの「印刷」（Ctrl+P）でA4にきれいに出す
-import { $ } from "./util.js?v=0.2I9b";
-import { state } from "./state.js?v=0.2I9b";
+import { $ } from "./util.js?v=0.2I9c";
+import { state } from "./state.js?v=0.2I9c";
 
 const TAB = { entry: "記帳", trial: "試算表", bs: "B/S（貸借対照表）", pl: "P/L（損益計算書）", cf: "C/F（キャッシュフロー）", annual: "年間の表", breakdown: "貸借内訳", ledger: "元帳・検索", monthend: "月末", settings: "設定" };
 let selOnly = false;
@@ -64,6 +64,13 @@ window.addEventListener("beforeprint", () => {
     let st = document.getElementById("print-orient");
     if (!st) { st = document.createElement("style"); st.id = "print-orient"; document.head.appendChild(st); }
     st.textContent = "@page { size: A4 landscape; margin: 10mm 8mm; }";
+    // 行数が多いときは、1枚に収まるように縮小する（1行はおよそ3.4mm、使える高さはおよそ168mm）
+    const tb = view.querySelector(".tbl.an");
+    if (tb) {
+      const R = tb.querySelectorAll("tbody tr").length;
+      const z = Math.min(1, 168 / (R * 3.4 + 10));
+      if (z < 1) { tb.style.zoom = z.toFixed(3); }
+    }
   }
   if (state.tab === "ledger") ledgerTable();
   if (state.tab === "entry" && selOnly) selectedOnly();
@@ -72,6 +79,8 @@ window.addEventListener("beforeprint", () => {
 window.addEventListener("afterprint", () => {
   const o = document.getElementById("print-orient");
   if (o) o.remove();
+  const an = document.querySelector(".tbl.an");
+  if (an) { an.style.zoom = ""; }
   selOnly = false;
   document.body.classList.remove("printsel");
   document.querySelectorAll("tr.pnone").forEach((tr) => tr.classList.remove("pnone"));

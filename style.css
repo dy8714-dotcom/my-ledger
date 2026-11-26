@@ -386,9 +386,15 @@ tr.off td { color: #8a8f99; background: #f3f1ec; }
 .tbl.an tr.grp2 td { background: #f4f1e8; font-weight: 600; font-size: 11.5px; }
 @media print {
   #view[data-tab="annual"] .an-l { position: static; }
-  #view[data-tab="annual"] .tbl.an { min-width: 0; width: 100%; font-size: 8.5px; table-layout: auto; }
-  #view[data-tab="annual"] .tbl.an td, #view[data-tab="annual"] .tbl.an th { padding: 2px 3px; }
+  #view[data-tab="annual"] .tbl.an { min-width: 0; width: 100%; font-size: 7px; line-height: 1.1; table-layout: auto; }
+  #view[data-tab="annual"] .tbl.an td, #view[data-tab="annual"] .tbl.an th { padding: 1px 3px; }
+  #view[data-tab="annual"] .note { font-size: 8px; margin: 2px 0 0; }
+  #view[data-tab="annual"] .monthbar { margin-bottom: 2px; }
   #an-view, #an-scope, #an-csv, #an-print, #an-prev, #an-next { display: none !important; }
   .tbl.tb th, .tbl.tb td { font-size: 10px; }
 }
 @media print { #tb-cmp, #tb-cmpm { display: none !important; } }
+
+/* 試算表の比較：見てほしい2列（今の残高・比べる期間の残高）を薄いグレーに */
+.tbl.tb.cmpon td:nth-child(5), .tbl.tb.cmpon td:nth-child(7) { background-color: #efefef; }
+@media print { .tbl.tb.cmpon td:nth-child(5), .tbl.tb.cmpon td:nth-child(7) { background-color: #ececec !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; } }

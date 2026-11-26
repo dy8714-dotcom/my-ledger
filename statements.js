@@ -1,7 +1,7 @@
 // B/S（貸借対照表）と P/L（損益計算書）。月ごとに、前月・昨年の同じ月・好きな月と比べられる
-import { state, loadAllVouchers } from "./state.js?v=0.2I9b";
-import { $, esc, yen, accChip, shiftMonth, showError } from "./util.js?v=0.2I9b";
-import { computeTrial, equityParts } from "./trial.js?v=0.2I9b";
+import { state, loadAllVouchers } from "./state.js?v=0.2I9c";
+import { $, esc, yen, accChip, shiftMonth, showError } from "./util.js?v=0.2I9c";
+import { computeTrial, equityParts } from "./trial.js?v=0.2I9c";
 
 const idxOf = (m) => { const [y, mm] = m.split(".").map((x) => parseInt(x, 10)); return y * 12 + (mm - 1); };
 export const keyOf = (idx) => String(Math.floor(idx / 12)).padStart(2, "0") + "." + ((idx % 12) + 1);
@@ -21,8 +21,8 @@ export function compareMonth(month, st) {
 }
 
 // ---------- B/S ----------
-const ASSET_CATS = ["現金・預金", "その他流動資産", "金融資産", "固定資産"];
-const LIAB_CATS = ["流動負債", "固定負債"];
+export const ASSET_CATS = ["現金・預金", "その他流動資産", "金融資産", "固定資産"];
+export const LIAB_CATS = ["流動負債", "固定負債"];
 
 // X月末の残高（資産・負債・純資産）
 export function bsAt(list, accountsById, X) {
