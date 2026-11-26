@@ -1,17 +1,17 @@
 // 記帳画面（入力欄と仕訳の一覧）
-import { state, col, db, loadParties, loadVouchers, fetchMonthVouchers } from "./state.js?v=0.2I9a";
-import { downloadFullBackup } from "./backup.js?v=0.2I9a";
-import { renderDeprBanner, askDeprChange, afterDeprEdit } from "./assets.js?v=0.2I9a";
-import { printSelectedOnly } from "./print.js?v=0.2I9a";
-import { renderRecBanner } from "./recurring.js?v=0.2I9a";
-import { askClosedConfirm } from "./monthend.js?v=0.2I9a";
-import { isClosed } from "./state.js?v=0.2I9a";
+import { state, col, db, loadParties, loadVouchers, fetchMonthVouchers } from "./state.js?v=0.2I9b";
+import { downloadFullBackup } from "./backup.js?v=0.2I9b";
+import { renderDeprBanner, askDeprChange, afterDeprEdit } from "./assets.js?v=0.2I9b";
+import { printSelectedOnly } from "./print.js?v=0.2I9b";
+import { renderRecBanner } from "./recurring.js?v=0.2I9b";
+import { askClosedConfirm } from "./monthend.js?v=0.2I9b";
+import { isClosed } from "./state.js?v=0.2I9b";
 import { $, esc, norm, hk, yen, parseAmount, WD, ymd, monthOf, shiftMonth, firstDayOf, accChip, openModal, closeModal }
-  from "./util.js?v=0.2I9a";
-import { createCombo } from "./combo.js?v=0.2I9a";
+  from "./util.js?v=0.2I9b";
+import { createCombo } from "./combo.js?v=0.2I9b";
 import { doc, setDoc, updateDoc, deleteDoc, writeBatch, serverTimestamp, increment, arrayUnion, deleteField }
   from "https://www.gstatic.com/firebasejs/13.4.0/firebase-firestore.js";
-import { patternsOf, sortPatterns, describePattern, addPattern, fromTemplate } from "./patterns.js?v=0.2I9a";
+import { patternsOf, sortPatterns, describePattern, addPattern, fromTemplate } from "./patterns.js?v=0.2I9b";
 
 // ---------- 候補の作り方 ----------
 const isBlank = (a) => a.name.startsWith("（") || a.name === "ー";
@@ -572,6 +572,22 @@ function mountVoucherForm(root, { voucher = null, onSaved, onCancel, onDeleted }
     $("pv-ok").focus();
   }
 
+  function askEmptyConfirm(miss, anchorEl) {
+    return new Promise((resolve) => {
+      const box = document.createElement("div");
+      box.className = "askbox";
+      box.innerHTML = `<p><strong>${miss.join("・")}が空のままです。</strong>このまま登録しますか？</p>
+        ${miss.includes("取引先") ? `<p class="note">売掛金・仮払金・未払費用・借入金は、取引先ごとの残高（貸借内訳）に使うので、入れておくのがおすすめです。</p>` : ""}
+        <div class="actions"><button type="button" class="primary" data-c="no">戻って入力</button><button type="button" class="sub" data-c="yes">このまま登録</button></div>`;
+      anchorEl.insertAdjacentElement("afterend", box);
+      const done = (v) => { document.removeEventListener("keydown", onKey, true); box.remove(); resolve(v); };
+      const onKey = (e) => { if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); done(false); } };
+      document.addEventListener("keydown", onKey, true);
+      box.addEventListener("click", (e) => { const b = e.target.closest("button[data-c]"); if (b) done(b.dataset.c === "yes"); });
+      box.querySelector('[data-c="no"]').focus();
+    });
+  }
+
   async function save() {
     msg("");
     const date = dateEl.value;
@@ -583,6 +599,19 @@ function mountVoucherForm(root, { voucher = null, onSaved, onCancel, onDeleted }
     applyBiz(lines);
     const pv = party.getValue();
     const fv = field.getValue().id || "";
+    // 空欄の確認：分野が空、または 売掛金・仮払金・未払費用・借入金 があるのに取引先が空のとき
+    {
+      const tracked = lines.some((l) => { const a = state.accountsById[l.accId]; return a && [20, 22, 41, 45].includes(a.no); });
+      const miss = [];
+      if (!fv) miss.push("分野");
+      if (tracked && !pv.id && !pv.newName) miss.push("取引先");
+      if (miss.length) {
+        saveBtn.disabled = true;
+        const go = await askEmptyConfirm(miss, saveBtn.parentElement);
+        saveBtn.disabled = false;
+        if (!go) return;
+      }
+    }
     // 締め済みの月に記帳・修正するときは確認する
     {
       const months = [monthOf(date)];

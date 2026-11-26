@@ -1,7 +1,7 @@
 // 試算表（科目ごとの 月初残高・借方・貸方・残高）
-import { state, loadAllVouchers } from "./state.js?v=0.2I9a";
-import { $, esc, yen, accChip, shiftMonth, showError } from "./util.js?v=0.2I9a";
-import { CATEGORIES } from "./seed.js?v=0.2I9a";
+import { state, loadAllVouchers } from "./state.js?v=0.2I9b";
+import { $, esc, yen, accChip, shiftMonth, showError } from "./util.js?v=0.2I9b";
+import { CATEGORIES } from "./seed.js?v=0.2I9b";
 
 // "26.11" → 通し番号（月ごとに +1）
 const idxOf = (m) => { const [y, mm] = m.split(".").map((x) => parseInt(x, 10)); return y * 12 + (mm - 1); };
@@ -20,6 +20,17 @@ function periodOf() {
     return a <= b ? [a, b] : [b, a];
   }
   return [cur, cur];
+}
+
+// 比べる期間（同じ長さ）。none なら null
+function cmpPeriod(S, E) {
+  const t = state.tb;
+  const c = t.cmp || "none";
+  const len = E - S;
+  if (c === "prev") return [S - (len + 1), S - 1];
+  if (c === "lastyear") return [S - 12, E - 12];
+  if (c === "custom") { const s = t.cmpMonth ? idxOf(t.cmpMonth) : S - (len + 1); return [s, s + len]; }
+  return null;
 }
 
 function periodTitle(S, E) {
@@ -98,7 +109,14 @@ function draw(list) {
   const [S, E] = periodOf();
   const { rows, allDr, allCr, pl } = computeTrial(scoped(list, scope), state.accountsById, S, E);
   const all = Object.values(rows);
-  const visible = (r) => !t.hideZero || r.open || r.dr || r.cr || r.bal;
+  const CP = cmpPeriod(S, E);
+  const cmpRes = CP ? computeTrial(scoped(list, scope), state.accountsById, CP[0], CP[1]) : null;
+  const cmpRows = cmpRes ? cmpRes.rows : null;
+  const cb = (r) => (cmpRows && cmpRows[r.a.id] ? cmpRows[r.a.id].bal : 0);
+  const cmpTitle = CP ? (CP[0] === CP[1] ? labelOf(CP[0]) : `${labelOf(CP[0])}〜${CP[1] % 12 + 1}月`) : "";
+  const nc = CP ? 2 : 0; // 比較で増える列
+  const visible = (r) => !t.hideZero || r.open || r.dr || r.cr || r.bal || (CP && cb(r));
+  const cmpCells = (bal, cbal) => CP ? `<td class="r num muted2">${num(cbal)}</td><td class="r num">${diffHtml(bal - cbal)}</td>` : "";
   const periodDr = all.reduce((s, r) => s + r.dr, 0);
   const periodCr = all.reduce((s, r) => s + r.cr, 0);
   const okAll = scope !== "all" || (periodDr === periodCr && allDr === allCr);
@@ -108,10 +126,10 @@ function draw(list) {
   let alt = 0;
   const rowHtml = (r) => `<tr class="${alt++ % 2 ? "alt" : ""}">
       <td>${link(r.a.id, "both", accChip(r.a))}</td><td class="r num">${num(r.open)}</td><td class="r num">${link(r.a.id, "debit", num(r.dr))}</td><td class="r num">${link(r.a.id, "credit", num(r.cr))}</td>
-      <td class="r num" style="font-weight:700">${link(r.a.id, "both", num(r.bal))}</td><td class="r num">${diffHtml(r.diff)}</td></tr>`;
-  const sum = (rs) => rs.reduce((s, r) => ({ open: s.open + r.open, dr: s.dr + r.dr, cr: s.cr + r.cr, bal: s.bal + r.bal, diff: s.diff + r.diff }),
-    { open: 0, dr: 0, cr: 0, bal: 0, diff: 0 });
-  const subHtml = (name, rs) => { const x = sum(rs); return `<tr class="sub"><td>${esc(name)} 計</td><td class="r num">${yen(x.open)}</td><td class="r num">${yen(x.dr)}</td><td class="r num">${yen(x.cr)}</td><td class="r num">${yen(x.bal)}</td><td class="r num">${x.diff > 0 ? "+" : ""}${yen(x.diff)}</td></tr>`; };
+      <td class="r num" style="font-weight:700">${link(r.a.id, "both", num(r.bal))}</td><td class="r num">${diffHtml(r.diff)}</td>${cmpCells(r.bal, cb(r))}</tr>`;
+  const sum = (rs) => rs.reduce((s, r) => ({ open: s.open + r.open, dr: s.dr + r.dr, cr: s.cr + r.cr, bal: s.bal + r.bal, diff: s.diff + r.diff, cbal: s.cbal + cb(r) }),
+    { open: 0, dr: 0, cr: 0, bal: 0, diff: 0, cbal: 0 });
+  const subHtml = (name, rs) => { const x = sum(rs); return `<tr class="sub"><td>${esc(name)} 計</td><td class="r num">${yen(x.open)}</td><td class="r num">${yen(x.dr)}</td><td class="r num">${yen(x.cr)}</td><td class="r num">${yen(x.bal)}</td><td class="r num">${x.diff > 0 ? "+" : ""}${yen(x.diff)}</td>${cmpCells(x.bal, x.cbal)}</tr>`; };
   if (t.byNo) {
     const rs = all.filter(visible).sort((x, y) => x.a.no - y.a.no);
     body = rs.map(rowHtml).join("");
@@ -119,26 +137,28 @@ function draw(list) {
     CATEGORIES.forEach((cat) => {
       const rs = all.filter((r) => r.a.category === cat && visible(r)).sort((x, y) => x.a.no - y.a.no);
       if (!rs.length) return;
-      body += `<tr class="grp"><td colspan="6">${esc(cat)}</td></tr>` + rs.map(rowHtml).join("") + subHtml(cat, rs);
+      body += `<tr class="grp"><td colspan="${6 + nc}">${esc(cat)}</td></tr>` + rs.map(rowHtml).join("") + subHtml(cat, rs);
     });
   }
-  if (!body) body = `<tr><td colspan="6" class="empty">この期間の仕訳はありません。</td></tr>`;
+  if (!body) body = `<tr><td colspan="${6 + nc}" class="empty">この期間の仕訳はありません。</td></tr>`;
 
   // 純資産の部：元入金などに、前期までの損益と当期純損益を足して、資産−負債＝純資産を確かめる
   const eqOpen = equityParts(pl, S - 1), eqEnd = equityParts(pl, E);
   const kindRows = (k) => all.filter((r) => r.a.kind === k);
   const A = sum(kindRows("asset")), L = sum(kindRows("liability")), Q = sum(kindRows("equity"));
   const eq = { open: Q.open + eqOpen.prev + eqOpen.cur, bal: Q.bal + eqEnd.prev + eqEnd.cur };
+  const ce = CP ? equityParts(cmpRes.pl, CP[1]) : { prev: 0, cur: 0 };
+  const ceq = Q.cbal + ce.prev + ce.cur;
   const gapOpen = A.open - L.open - eq.open, gapEnd = A.bal - L.bal - eq.bal;
   const eqOk = gapOpen === 0 && gapEnd === 0;
-  const eqRow = (name, o, b, cls) => `<tr class="${cls || ""}"><td>${esc(name)}</td><td class="r num">${num(o)}</td><td class="r num muted">―</td><td class="r num muted">―</td><td class="r num" style="font-weight:700">${num(b)}</td><td class="r num">${diffHtml(b - o)}</td></tr>`;
+  const eqRow = (name, o, b, cls, cbv) => `<tr class="${cls || ""}"><td>${esc(name)}</td><td class="r num">${num(o)}</td><td class="r num muted">―</td><td class="r num muted">―</td><td class="r num" style="font-weight:700">${num(b)}</td><td class="r num">${diffHtml(b - o)}</td>${CP ? `<td class="r num muted2">${num(cbv)}</td><td class="r num">${diffHtml(b - cbv)}</td>` : ""}</tr>`;
   if (all.length && scope === "all") {
-    body += `<tr class="grp"><td colspan="6">純資産の部（損益の繰越を含む）</td></tr>` +
-      eqRow("前期までの損益（繰越）", eqOpen.prev, eqEnd.prev) +
-      eqRow("当期純損益（その年の1月〜）", eqOpen.cur, eqEnd.cur) +
-      eqRow("純資産 計（元入金など＋上の2行）", eq.open, eq.bal, "sub") +
-      `<tr class="sub"><td>資産 計 − 負債 計</td><td class="r num">${yen(A.open - L.open)}</td><td></td><td></td><td class="r num">${yen(A.bal - L.bal)}</td><td></td></tr>` +
-      `<tr class="${eqOk ? "sub" : "tot"}" id="eq-check"><td>資産 − 負債 − 純資産</td><td class="r num">${yen(gapOpen)}</td><td></td><td></td><td class="r num">${yen(gapEnd)}</td><td>${eqOk ? "一致 ✓" : "合いません"}</td></tr>`;
+    body += `<tr class="grp"><td colspan="${6 + nc}">純資産の部（損益の繰越を含む）</td></tr>` +
+      eqRow("前期までの損益（繰越）", eqOpen.prev, eqEnd.prev, "", ce.prev) +
+      eqRow("当期純損益（その年の1月〜）", eqOpen.cur, eqEnd.cur, "", ce.cur) +
+      eqRow("純資産 計（元入金など＋上の2行）", eq.open, eq.bal, "sub", ceq) +
+      `<tr class="sub"><td>資産 計 − 負債 計</td><td class="r num">${yen(A.open - L.open)}</td><td></td><td></td><td class="r num">${yen(A.bal - L.bal)}</td><td></td>${CP ? `<td class="r num muted2">${yen(A.cbal - L.cbal)}</td><td class="r num">${diffHtml((A.bal - L.bal) - (A.cbal - L.cbal))}</td>` : ""}</tr>` +
+      `<tr class="${eqOk ? "sub" : "tot"}" id="eq-check"><td>資産 − 負債 − 純資産</td><td class="r num">${yen(gapOpen)}</td><td></td><td></td><td class="r num">${yen(gapEnd)}</td><td>${eqOk ? "一致 ✓" : "合いません"}</td>${CP ? "<td></td><td></td>" : ""}</tr>`;
   }
 
   // 右側のカード
@@ -162,6 +182,9 @@ function draw(list) {
       <div class="seg" id="tb-scope">${[["all", "全体"], ["biz", "事業だけ"], ["life", "生活だけ"]].map(([k, n]) => `<button type="button" data-scope="${k}" class="${scope === k ? "on" : ""}">${n}</button>`).join("")}</div>
       <div class="seg" id="tb-seg">${modes.map(([k, n]) => `<button type="button" data-mode="${k}" class="${t.mode === k ? "on" : ""}">${n}</button>`).join("")}</div>
       ${t.mode === "custom" ? `<input type="month" id="tb-from" value="${ym(S)}"> 〜 <input type="month" id="tb-to" value="${ym(E)}">` : ""}
+      <span class="note">比べる：</span>
+      <div class="seg" id="tb-cmp">${[["none", "なし"], ["prev", "前の期間"], ["lastyear", "昨年の同じ期間"], ["custom", "好きな月から"]].map(([k, n]) => `<button type="button" data-cmp="${k}" class="${(t.cmp || "none") === k ? "on" : ""}">${n}</button>`).join("")}</div>
+      ${t.cmp === "custom" ? `<input type="month" id="tb-cmpm" value="${ym(CP[0])}">` : ""}
       <span class="${okAll ? "okbadge" : "warnbadge"}">${scope !== "all" ? "損益の科目だけ" : okAll ? "貸借一致 ✓" : `貸借が合いません（差額 ¥${yen(Math.abs(allDr - allCr) || Math.abs(periodDr - periodCr))}）`}</span>
       <button type="button" class="sub" id="tb-csv">CSV</button>
       <button type="button" class="sub" id="tb-print">印刷</button>
@@ -172,10 +195,10 @@ function draw(list) {
           <label class="note"><input type="checkbox" id="tb-hide" ${t.hideZero ? "checked" : ""}> 動きも残高もない科目を隠す</label>
           <label class="note"><input type="checkbox" id="tb-byno" ${t.byNo ? "checked" : ""}> 番号順（区分を分けない）</label></div>
         <div class="tablewrap"><table class="tbl tb">
-          <thead><tr><th>科目</th><th class="r">月初残高</th><th class="r">借方</th><th class="r">貸方</th><th class="r">残高</th><th class="r">増減</th></tr></thead>
+          <thead><tr><th>科目</th><th class="r">月初残高</th><th class="r">借方</th><th class="r">貸方</th><th class="r">残高</th><th class="r">増減</th>${CP ? `<th class="r">${esc(cmpTitle)}の残高</th><th class="r">残高の差</th>` : ""}</tr></thead>
           <tbody>${body}
             <tr class="tot"><td>借方合計 ＝ 貸方合計</td><td></td><td class="r num">${yen(periodDr)}</td><td class="r num">${yen(periodCr)}</td>
-              <td colspan="2" style="text-align:right">${scope !== "all" ? "" : periodDr === periodCr ? "一致 ✓" : "不一致"}</td></tr>
+              <td colspan="2" style="text-align:right">${scope !== "all" ? "" : periodDr === periodCr ? "一致 ✓" : "不一致"}</td>${CP ? "<td></td><td></td>" : ""}</tr>
           </tbody></table></div>
       </section>
       <aside class="tbside">
@@ -208,6 +231,14 @@ function draw(list) {
     t.scope = b.dataset.scope;
     redraw();
   });
+  $("tb-cmp").addEventListener("click", (e) => {
+    const b = e.target.closest("button[data-cmp]");
+    if (!b) return;
+    t.cmp = b.dataset.cmp;
+    if (t.cmp === "custom" && !t.cmpMonth) t.cmpMonth = keyOf(S - (E - S + 1));
+    redraw();
+  });
+  if (t.cmp === "custom") $("tb-cmpm").addEventListener("change", (e) => { if (e.target.value) { t.cmpMonth = keyOf((parseInt(e.target.value.slice(0, 4), 10) - 2000) * 12 + parseInt(e.target.value.slice(5, 7), 10) - 1); redraw(); } });
   $("tb-seg").addEventListener("click", (e) => {
     const b = e.target.closest("button[data-mode]");
     if (!b) return;
@@ -225,9 +256,9 @@ function draw(list) {
   $("tb-print").addEventListener("click", () => window.print());
   $("tb-csv").addEventListener("click", () => {
     const q = (x) => `"${String(x).replace(/"/g, '""')}"`;
-    const lines = [["区分", "番号", "科目", "月初残高", "借方", "貸方", "残高", "増減"].map(q).join(",")];
+    const lines = [["区分", "番号", "科目", "月初残高", "借方", "貸方", "残高", "増減"].concat(CP ? [cmpTitle + "の残高", "残高の差"] : []).map(q).join(",")];
     all.filter(visible).sort((x, y) => CATEGORIES.indexOf(x.a.category) - CATEGORIES.indexOf(y.a.category) || x.a.no - y.a.no)
-      .forEach((r) => lines.push([q(r.a.category), r.a.no, q(r.a.name), r.open, r.dr, r.cr, r.bal, r.diff].join(",")));
+      .forEach((r) => lines.push([q(r.a.category), r.a.no, q(r.a.name), r.open, r.dr, r.cr, r.bal, r.diff].concat(CP ? [cb(r), r.bal - cb(r)] : []).join(",")));
     lines.push([q("純資産の部"), "", q("前期までの損益（繰越）"), eqOpen.prev, "", "", eqEnd.prev, eqEnd.prev - eqOpen.prev].join(","));
     lines.push([q("純資産の部"), "", q("当期純損益"), eqOpen.cur, "", "", eqEnd.cur, eqEnd.cur - eqOpen.cur].join(","));
     const blob = new Blob(["﻿" + lines.join("\r\n")], { type: "text/csv;charset=utf-8" });

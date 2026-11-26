@@ -375,3 +375,20 @@ tr.off td { color: #8a8f99; background: #f3f1ec; }
 .linkbtn:hover { text-decoration: underline; }
 .cft tr.sat td:first-child { color: #1a4fb5; } .cft tr.sun td:first-child { color: #b32121; }
 @media print { .cf-tog { pointer-events: none; } #cf-sub, #cf-csv, #cf-print { display: none; } }
+
+/* I9b 年間の表・試算表の比較 */
+.tbl.an { min-width: 1180px; font-size: 12.5px; }
+.tbl.an td, .tbl.an th { padding: 4px 6px; white-space: nowrap; }
+.tbl.an .an-l { position: sticky; left: 0; background: #fff; min-width: 190px; z-index: 1; }
+.tbl.an th.an-l { background: #e9e5da; }
+.tbl.an tr.sub .an-l, .tbl.an tr.tot .an-l, .tbl.an tr.grp .an-l { background: inherit; }
+.tbl.an td.an-t { font-weight: 700; background: #faf8f2; }
+.tbl.an tr.grp2 td { background: #f4f1e8; font-weight: 600; font-size: 11.5px; }
+@media print {
+  #view[data-tab="annual"] .an-l { position: static; }
+  #view[data-tab="annual"] .tbl.an { min-width: 0; width: 100%; font-size: 8.5px; table-layout: auto; }
+  #view[data-tab="annual"] .tbl.an td, #view[data-tab="annual"] .tbl.an th { padding: 2px 3px; }
+  #an-view, #an-scope, #an-csv, #an-print, #an-prev, #an-next { display: none !important; }
+  .tbl.tb th, .tbl.tb td { font-size: 10px; }
+}
+@media print { #tb-cmp, #tb-cmpm { display: none !important; } }

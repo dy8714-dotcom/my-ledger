@@ -1,18 +1,19 @@
 // マイ帳簿サイト（ログインと、メニューの切り替え）
 import { GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged }
   from "https://www.gstatic.com/firebasejs/13.4.0/firebase-auth.js";
-import { auth, state, loadAll, loadVouchers } from "./state.js?v=0.2I9a";
-import { $, esc, showError } from "./util.js?v=0.2I9a";
-import { renderSettings } from "./settings.js?v=0.2I9a";
-import { renderEntry } from "./entry.js?v=0.2I9a";
-import { renderTrial } from "./trial.js?v=0.2I9a";
-import { renderLedger } from "./ledger.js?v=0.2I9a";
-import { renderBS, renderPL } from "./statements.js?v=0.2I9a";
-import { renderCF } from "./cashflow.js?v=0.2I9a";
-import { renderBreakdown, refreshHeaderCheck } from "./breakdown.js?v=0.2I9a";
-import { renderMonthEnd } from "./monthend.js?v=0.2I9a";
-import { renderBackupBanner } from "./backup.js?v=0.2I9a";
-import "./print.js?v=0.2I9a";
+import { auth, state, loadAll, loadVouchers } from "./state.js?v=0.2I9b";
+import { $, esc, showError } from "./util.js?v=0.2I9b";
+import { renderSettings } from "./settings.js?v=0.2I9b";
+import { renderEntry } from "./entry.js?v=0.2I9b";
+import { renderTrial } from "./trial.js?v=0.2I9b";
+import { renderLedger } from "./ledger.js?v=0.2I9b";
+import { renderBS, renderPL } from "./statements.js?v=0.2I9b";
+import { renderCF } from "./cashflow.js?v=0.2I9b";
+import { renderAnnual } from "./annual.js?v=0.2I9b";
+import { renderBreakdown, refreshHeaderCheck } from "./breakdown.js?v=0.2I9b";
+import { renderMonthEnd } from "./monthend.js?v=0.2I9b";
+import { renderBackupBanner } from "./backup.js?v=0.2I9b";
+import "./print.js?v=0.2I9b";
 
 $("btn-login").addEventListener("click", async () => {
   showError("");
@@ -55,7 +56,7 @@ $("nav").addEventListener("click", (e) => {
 function render() {
   document.querySelectorAll("#nav button").forEach((b) =>
     b.classList.toggle("active", b.dataset.tab === state.tab));
-  const fn = { entry: renderEntry, trial: renderTrial, bs: renderBS, pl: renderPL, cf: renderCF, breakdown: renderBreakdown, ledger: renderLedger, monthend: renderMonthEnd, settings: renderSettings }[state.tab];
+  const fn = { entry: renderEntry, trial: renderTrial, bs: renderBS, pl: renderPL, cf: renderCF, annual: renderAnnual, breakdown: renderBreakdown, ledger: renderLedger, monthend: renderMonthEnd, settings: renderSettings }[state.tab];
   if (fn) {
     refreshHeaderCheck();
     return Promise.resolve(fn()).then(() => refreshHeaderCheck(), () => {});

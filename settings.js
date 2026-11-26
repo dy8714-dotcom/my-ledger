@@ -1,18 +1,18 @@
 // 設定画面（科目・分野の台帳）
-import { state, col, loadAll, loadParties } from "./state.js?v=0.2I9a";
-import { $, esc, norm, hk, showError } from "./util.js?v=0.2I9a";
+import { state, col, loadAll, loadParties } from "./state.js?v=0.2I9b";
+import { $, esc, norm, hk, showError } from "./util.js?v=0.2I9b";
 import { doc, setDoc, writeBatch, serverTimestamp, deleteField }
   from "https://www.gstatic.com/firebasejs/13.4.0/firebase-firestore.js";
 import { SEED_ACCOUNTS, SEED_FIELDS, CATEGORIES, CATEGORY_COLORS, KIND_LABELS, sideOf }
-  from "./seed.js?v=0.2I9a";
-import { db } from "./state.js?v=0.2I9a";
-import { renderImport } from "./importer.js?v=0.2I9a";
-import { renderDeleted } from "./deleted.js?v=0.2I9a";
-import { renderAssets } from "./assets.js?v=0.2I9a";
-import { renderBackup } from "./backup.js?v=0.2I9a";
-import { renderBizMove } from "./bizmove.js?v=0.2I9a";
-import { renderRecurring } from "./recurring.js?v=0.2I9a";
-import { patternsOf, sortPatterns, describePattern } from "./patterns.js?v=0.2I9a";
+  from "./seed.js?v=0.2I9b";
+import { db } from "./state.js?v=0.2I9b";
+import { renderImport } from "./importer.js?v=0.2I9b";
+import { renderDeleted } from "./deleted.js?v=0.2I9b";
+import { renderAssets } from "./assets.js?v=0.2I9b";
+import { renderBackup } from "./backup.js?v=0.2I9b";
+import { renderBizMove } from "./bizmove.js?v=0.2I9b";
+import { renderRecurring } from "./recurring.js?v=0.2I9b";
+import { patternsOf, sortPatterns, describePattern } from "./patterns.js?v=0.2I9b";
 
 // ---------- 設定画面 ----------
 export function renderSettings() {

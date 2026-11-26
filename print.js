@@ -1,8 +1,8 @@
 // 印刷の整備（I6d）：どの画面でも、ブラウザの「印刷」（Ctrl+P）でA4にきれいに出す
-import { $ } from "./util.js?v=0.2I9a";
-import { state } from "./state.js?v=0.2I9a";
+import { $ } from "./util.js?v=0.2I9b";
+import { state } from "./state.js?v=0.2I9b";
 
-const TAB = { entry: "記帳", trial: "試算表", bs: "B/S（貸借対照表）", pl: "P/L（損益計算書）", cf: "C/F（キャッシュフロー）", breakdown: "貸借内訳", ledger: "元帳・検索", monthend: "月末", settings: "設定" };
+const TAB = { entry: "記帳", trial: "試算表", bs: "B/S（貸借対照表）", pl: "P/L（損益計算書）", cf: "C/F（キャッシュフロー）", annual: "年間の表", breakdown: "貸借内訳", ledger: "元帳・検索", monthend: "月末", settings: "設定" };
 let selOnly = false;
 
 // 記帳画面：チェックを付けた仕訳だけを印刷する
@@ -59,11 +59,19 @@ window.addEventListener("beforeprint", () => {
   const d = new Date();
   const today = `${d.getFullYear()}/${d.getMonth() + 1}/${d.getDate()}`;
   head().innerHTML = `<span><b>マイ帳簿サイト</b>　${TAB[state.tab] || ""}${t ? "　" + t.textContent : ""}${sub}</span><span>印刷日 ${today}</span>`;
+  if (view.dataset.orient === "landscape" && state.tab === "annual") {
+    // 年間の表は13列あるので、この表だけ A4 横向きにする
+    let st = document.getElementById("print-orient");
+    if (!st) { st = document.createElement("style"); st.id = "print-orient"; document.head.appendChild(st); }
+    st.textContent = "@page { size: A4 landscape; margin: 10mm 8mm; }";
+  }
   if (state.tab === "ledger") ledgerTable();
   if (state.tab === "entry" && selOnly) selectedOnly();
 });
 
 window.addEventListener("afterprint", () => {
+  const o = document.getElementById("print-orient");
+  if (o) o.remove();
   selOnly = false;
   document.body.classList.remove("printsel");
   document.querySelectorAll("tr.pnone").forEach((tr) => tr.classList.remove("pnone"));
