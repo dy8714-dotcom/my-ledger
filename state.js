@@ -101,6 +101,7 @@ export async function loadBackupInfo() {
 export async function loadOpenings() {
   const snap = await getDoc(doc(col("meta"), "openings"));
   state.openings = snap.exists() ? snap.data().items || [] : [];
+  state.baseMonth = snap.exists() && snap.data().baseMonth ? snap.data().baseMonth : "26.11"; // 内訳の数え始め（基準月末）
   return state.openings;
 }
 
