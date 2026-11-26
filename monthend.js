@@ -1,8 +1,9 @@
 // 月末（手順I3）：金融資産の評価替え
-import { state, col, db, loadAllVouchers, loadVouchers, fetchMonthVouchers, loadClosings, isClosed, loadAssets } from "./state.js?v=0.2I10a";
-import { pendingDrafts } from "./assets.js?v=0.2I10a";
-import { downloadFullBackup, makeCopy, saveBackupToDrive } from "./backup.js?v=0.2I10a";
-import { $, esc, yen, ymd, hk, shiftMonth, monthOf, WD, showError } from "./util.js?v=0.2I10a";
+import { state, col, db, loadAllVouchers, loadVouchers, fetchMonthVouchers, loadClosings, isClosed, loadAssets } from "./state.js?v=0.2I10b";
+import { pendingDrafts } from "./assets.js?v=0.2I10b";
+import { monthStatus } from "./recurring.js?v=0.2I10b";
+import { downloadFullBackup, makeCopy, saveBackupToDrive } from "./backup.js?v=0.2I10b";
+import { $, esc, yen, ymd, hk, shiftMonth, monthOf, WD, showError } from "./util.js?v=0.2I10b";
 import { doc, getDocs, writeBatch, setDoc, deleteField, serverTimestamp, arrayUnion } from "https://www.gstatic.com/firebasejs/13.4.0/firebase-firestore.js";
 
 const EVAL_NOS = [26, 27, 28, 29, 30]; // 評価替えの対象（金融資産）
@@ -243,6 +244,10 @@ async function renderClose(view) {
   // 現金・預金（電子マネーなど）が月末にマイナスのまま残っていないか
   const negCash = state.accounts.filter((a) => a.kind === "asset" && a.category === "現金・預金" && (now[a.id] || 0) < 0);
   const okNeg = negCash.length === 0;
+  // 定期支払：その月度に記帳すべきものが、すべて記帳済みか（自動で調べる）
+  const recSt = monthStatus(state.recurring || [], month, all.filter((v) => v.month === month), "9999-12-31");
+  const recTodo = recSt.filter((s) => !s.done);
+  const okRec = recTodo.length === 0;
   const okDep = drafts.length === 0, okEval = evalMiss.length === 0;
   const mark = (ok) => (ok ? `<span class="ok">✓</span>` : `<span class="ng">⚠</span>`);
   const changed = closed ? diffBalances(closing.balances, now) : [];
@@ -256,7 +261,7 @@ async function renderClose(view) {
     <section class="panel">
       <h3><span class="bar"></span>締めのチェックリスト（${esc(month)}月度：${esc(end)}まで）</h3>
       <div class="tablewrap"><table class="tbl" style="min-width:0"><tbody>
-        <tr><td style="width:40px"><input type="checkbox" id="cl-m1" ${manual.recurring ? "checked" : ""} ${closed ? "disabled" : ""}></td><td>定期支払（☆★◇◆）がすべて記帳されている</td><td class="note">定期支払の機能はまだないので、自分で確認してチェックします</td></tr>
+        <tr><td style="width:40px">${mark(okRec)}</td><td>定期支払（☆★◇◆）がすべて記帳されている</td><td class="note">${!recSt.length ? "この月度の定期支払はありません" : okRec ? `${recSt.length}件すべて記帳済み` : `未記帳が${recTodo.length}件：${recTodo.map((x) => esc((x.rec.mark || "") + x.rec.name)).join("、")}　<button type="button" class="sub" id="cl-rec-go">記帳画面で確認する</button>`}</td></tr>
         <tr><td>${mark(okDep)}</td><td>月割り償却の仕訳を登録した</td><td class="note">${okDep ? "未計上なし" : `未計上が${drafts.length}件あります（記帳画面の上の「確認する」から登録）`}</td></tr>
         <tr><td>${mark(okEval)}</td><td>金融資産の評価替えをした</td><td class="note">${okEval ? "残高のある科目はすべて入力済み" : `未入力：${evalMiss.map((a) => esc(a.no + a.name)).join("、")}（「評価替え」タブ）`}</td></tr>
         <tr><td><input type="checkbox" id="cl-m2" ${manual.points ? "checked" : ""} ${closed ? "disabled" : ""}></td><td>ポイントの残高合わせ（任意）</td><td class="note">残高合わせの機能はまだないので、必要なら手で記帳してチェックします</td></tr>
@@ -271,7 +276,7 @@ async function renderClose(view) {
           <table class="tbl" style="min-width:0"><thead><tr><th>科目</th><th class="amt">締めた時</th><th class="amt">いま</th><th class="amt">差</th></tr></thead><tbody>
           ${changed.map((c) => { const a = state.accountsById[c.accId] || {}; return `<tr><td>${esc(a.no)} ${esc(hk(a.name || c.accId))}</td><td class="amt">${yen(c.saved)}</td><td class="amt">${yen(c.now)}</td><td class="amt">${c.now - c.saved > 0 ? "+" : "−"}${yen(Math.abs(c.now - c.saved))}</td></tr>`; }).join("")}</tbody></table></div>` : `<p class="ok">✓ 締めた時の残高と、いまの計算結果は一致しています。</p>`}
         <div class="actions" style="justify-content:flex-start"><button type="button" class="danger" id="cl-reopen">締めを解除する</button></div>`
-      : `<p id="cl-msg" class="note">${okDep && okEval && okBal && manual.recurring ? "すべてそろっています。" : "そろっていない項目があります。確認してから締めてください。"}</p>
+      : `<p id="cl-msg" class="note">${okRec && okDep && okEval && okBal ? "すべてそろっています。" : "そろっていない項目があります。確認してから締めてください。"}</p>
         <div class="actions" style="justify-content:flex-start"><button type="button" class="primary" id="cl-close">${esc(month)}月度を締める</button></div>
         <p class="note">締めると、その月の全科目の残高を「控え」として保存します。締めたあとにその月へ記帳すると確認画面が出て、控えとずれると「締めた後に変わった」と表示します。</p>`}
     </section>
@@ -299,11 +304,11 @@ async function renderClose(view) {
       } catch (err) { console.error(err); $("cl-bk-yes").disabled = false; $("cl-bk-msg").textContent = "失敗しました：" + (err.code || err.message); }
     });
   }
-  if ($("cl-m1")) $("cl-m1").addEventListener("change", (e) => { manual.recurring = e.target.checked; });
+  if ($("cl-rec-go")) $("cl-rec-go").addEventListener("click", async () => { state.month = month; try { await loadVouchers(); } catch (err) { console.error(err); } document.querySelector('#nav [data-tab="entry"]').click(); });
   if ($("cl-m2")) $("cl-m2").addEventListener("change", (e) => { manual.points = e.target.checked; });
   if ($("cl-close")) $("cl-close").addEventListener("click", async () => {
     const miss = [];
-    if (!manual.recurring) miss.push("定期支払の確認");
+    if (!okRec) miss.push("定期支払の記帳");
     if (!okDep) miss.push("月割り償却");
     if (!okEval) miss.push("評価替え");
     if (!okNeg) miss.push("現金・預金のマイナス");
@@ -311,7 +316,7 @@ async function renderClose(view) {
     if (miss.length && !window.confirm(`次の項目がそろっていません：${miss.join("、")}\nそれでも締めますか？`)) return;
     $("cl-close").disabled = true;
     try {
-      await closeMonth(month, now, upto.length, { recurring: manual.recurring, points: manual.points });
+      await closeMonth(month, now, upto.length, { recurring: okRec, points: manual.points });
       me.justClosed = month; // 締めた直後は、バックアップの案内を出す
       try { await makeCopy(`月次締め ${month}`); me.copyNote = "Firestore内に控えを自動で作りました。"; }
       catch (err) { console.error("[控え]", err); me.copyNote = "Firestore内の控えは作れませんでした（設定→バックアップから手で作れます）。"; }

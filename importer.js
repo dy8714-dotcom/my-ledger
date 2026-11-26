@@ -1,7 +1,7 @@
 // 過去データの取り込み（手順H）：仕訳CSV → 検査 → プレビュー → 登録
-import { state, col, db, loadAllVouchers, loadParties, loadStats, loadVouchers } from "./state.js?v=0.2I10a";
-import { $, esc, norm, yen, monthOf, showError } from "./util.js?v=0.2I10a";
-import { downloadFullBackup } from "./backup.js?v=0.2I10a";
+import { state, col, db, loadAllVouchers, loadParties, loadStats, loadVouchers } from "./state.js?v=0.2I10b";
+import { $, esc, norm, yen, monthOf, showError } from "./util.js?v=0.2I10b";
+import { downloadFullBackup } from "./backup.js?v=0.2I10b";
 import { doc, writeBatch, deleteField }
   from "https://www.gstatic.com/firebasejs/13.4.0/firebase-firestore.js";
 
