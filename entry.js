@@ -1,15 +1,15 @@
 // 記帳画面（入力欄と仕訳の一覧）
-import { state, col, db, loadParties, loadVouchers, fetchMonthVouchers } from "./state.js?v=0.2I6a";
-import { downloadFullBackup } from "./backup.js?v=0.2I6a";
-import { renderDeprBanner, askDeprChange, afterDeprEdit } from "./assets.js?v=0.2I6a";
-import { askClosedConfirm } from "./monthend.js?v=0.2I6a";
-import { isClosed } from "./state.js?v=0.2I6a";
+import { state, col, db, loadParties, loadVouchers, fetchMonthVouchers } from "./state.js?v=0.2I6b";
+import { downloadFullBackup } from "./backup.js?v=0.2I6b";
+import { renderDeprBanner, askDeprChange, afterDeprEdit } from "./assets.js?v=0.2I6b";
+import { askClosedConfirm } from "./monthend.js?v=0.2I6b";
+import { isClosed } from "./state.js?v=0.2I6b";
 import { $, esc, norm, hk, yen, parseAmount, WD, ymd, monthOf, shiftMonth, firstDayOf, accChip, openModal, closeModal }
-  from "./util.js?v=0.2I6a";
-import { createCombo } from "./combo.js?v=0.2I6a";
+  from "./util.js?v=0.2I6b";
+import { createCombo } from "./combo.js?v=0.2I6b";
 import { doc, setDoc, updateDoc, deleteDoc, writeBatch, serverTimestamp, increment, arrayUnion, deleteField }
   from "https://www.gstatic.com/firebasejs/13.4.0/firebase-firestore.js";
-import { patternsOf, sortPatterns, describePattern, addPattern, fromTemplate } from "./patterns.js?v=0.2I6a";
+import { patternsOf, sortPatterns, describePattern, addPattern, fromTemplate } from "./patterns.js?v=0.2I6b";
 
 // ---------- 候補の作り方 ----------
 const isBlank = (a) => a.name.startsWith("（") || a.name === "ー";
@@ -108,12 +108,15 @@ function mountVoucherForm(root, { voucher = null, onSaved, onCancel, onDeleted }
       <div class="in c2"><label>取引先</label><div data-k="party"></div></div>
       <div class="in c7 simple"><label>摘要</label><input type="text" data-k="memo" autocomplete="off"></div>
       <div class="in c2 simple"><label>金額</label><input type="text" inputmode="numeric" data-k="amount" class="amt" autocomplete="off"></div>
+      <div class="in c2 simple"><label>事業／生活</label>
+        <select data-k="biz"><option value="life">生活</option><option value="biz">事業</option><option value="split">按分</option></select></div>
       <div class="in c1"><label>印</label>
         <select data-k="mark"><option value="">ー</option><option>☆</option><option>★</option><option>◆</option><option>◇</option></select></div>
+      <div class="in c3" data-k="bizamtwrap" hidden><label>うち事業分の金額（残りは生活）</label><input type="text" inputmode="numeric" data-k="bizamt" class="amt" autocomplete="off"></div>
     </div>
     <div class="patbar" data-k="patbar" hidden></div>
     <div class="lines" data-k="lines" hidden>
-      <div class="lhead"><span>区分</span><span>科目</span><span class="r">金額</span><span>税率</span><span>摘要</span><span></span></div>
+      <div class="lhead"><span>区分</span><span>科目</span><span class="r">金額</span><span>税率</span><span>事業</span><span>摘要</span><span></span></div>
       <div data-k="linerows"></div>
       <div class="lfoot" data-k="balance"></div>
     </div>
@@ -130,10 +133,12 @@ function mountVoucherForm(root, { voucher = null, onSaved, onCancel, onDeleted }
   const q = (k) => root.querySelector(`[data-k="${k}"]`);
   const dateEl = q("date"), seqEl = q("seq"), taxEl = q("tax"), memoEl = q("memo");
   const amountEl = q("amount"), markEl = q("mark"), msgEl = q("msg"), saveBtn = q("save");
+  const bizEl = q("biz"), bizAmtEl = q("bizamt"), bizAmtWrap = q("bizamtwrap");
   const simpleEls = root.querySelectorAll(".simple");
   const patbar = q("patbar"), rememberEl = q("remember"), rememberWrap = q("rememberwrap"), rememberLabel = q("rememberlabel");
   const linesBox = q("lines"), rowsHost = q("linerows"), balanceEl = q("balance");
   let taxTouched = false;
+  let bizTouched = false;
   let detail = false;
   const rows = [];
 
@@ -158,6 +163,21 @@ function mountVoucherForm(root, { voucher = null, onSaved, onCancel, onDeleted }
     taxEl.value = String((d && d.tax) || (c && c.tax) || 0);
   }
 
+  const isPLAcc = (a) => !!a && (a.kind === "expense" || a.kind === "revenue");
+  // 損益の科目を選んだら、その科目の初期値（事業/生活）を入れる。自分で選び直したあとは変えない
+  function defaultBiz() {
+    if (bizTouched || detail) return;
+    const a = [debit.getValue().id, credit.getValue().id].map((id) => state.accountsById[id]).find(isPLAcc);
+    bizEl.value = a && a.biz === "biz" ? "biz" : "life";
+    updateBizUI();
+  }
+  function updateBizUI() {
+    bizAmtWrap.hidden = detail || bizEl.value !== "split";
+  }
+  const onAcc = () => { defaultTax(); defaultBiz(); };
+  bizEl.addEventListener("change", () => { bizTouched = true; updateBizUI(); if (bizEl.value === "split") bizAmtEl.focus(); });
+  bizAmtEl.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); save(); } });
+
   const order = () => [dateEl, taxEl, debit.input, credit.input, field.input, party.input, memoEl, amountEl, markEl];
   function focusNext(el) {
     const list = order();
@@ -167,11 +187,11 @@ function mountVoucherForm(root, { voucher = null, onSaved, onCancel, onDeleted }
 
   const debit = createCombo(q("debit"), {
     getItems: accountItems, labelOf: accLabel,
-    onChange: defaultTax, onEnter: () => focusNext(debit.input)
+    onChange: onAcc, onEnter: () => focusNext(debit.input)
   });
   const credit = createCombo(q("credit"), {
     getItems: accountItems, labelOf: accLabel,
-    onChange: defaultTax, onEnter: () => focusNext(credit.input)
+    onChange: onAcc, onEnter: () => focusNext(credit.input)
   });
   const field = createCombo(q("field"), {
     getItems: () => fieldItems(currentAccIds()), labelOf: fieldLabel, onEnter: () => focusNext(field.input)
@@ -280,14 +300,21 @@ function mountVoucherForm(root, { voucher = null, onSaved, onCancel, onDeleted }
       <div data-r="acc"></div>
       <input type="text" inputmode="numeric" data-r="amount" class="amt" autocomplete="off">
       <select data-r="tax"><option value="0">ー</option><option value="8">8%</option><option value="10">10%</option></select>
+      <select data-r="biz"><option value="life">生活</option><option value="biz">事業</option></select>
       <input type="text" data-r="memo" autocomplete="off">
       <button type="button" class="x" aria-label="この行を削除">×</button>`;
     rowsHost.appendChild(el);
     const g = (k) => el.querySelector(`[data-r="${k}"]`);
-    const r = { el, sideEl: g("side"), amountEl: g("amount"), taxEl: g("tax"), memoEl: g("memo"), taxTouched: !!init.taxSet };
+    const r = { el, sideEl: g("side"), amountEl: g("amount"), taxEl: g("tax"), bizEl: g("biz"), memoEl: g("memo"), taxTouched: !!init.taxSet, bizTouched: !!init.biz };
+    const syncBiz = () => {
+      const a = state.accountsById[r.acc.getValue().id];
+      r.bizEl.style.visibility = isPLAcc(a) ? "visible" : "hidden";
+      if (!r.bizTouched) r.bizEl.value = a && a.biz === "biz" ? "biz" : "life";
+    };
+    r.bizEl.addEventListener("change", () => { r.bizTouched = true; });
     r.acc = createCombo(g("acc"), {
       getItems: accountItems, labelOf: accLabel,
-      onChange(v) { if (!r.taxTouched) r.taxEl.value = accTax(v.id); },
+      onChange(v) { if (!r.taxTouched) r.taxEl.value = accTax(v.id); syncBiz(); },
       onEnter: () => lineFocus(r, "amount")
     });
     r.sideEl.value = init.side || "debit";
@@ -295,6 +322,8 @@ function mountVoucherForm(root, { voucher = null, onSaved, onCancel, onDeleted }
     r.amountEl.value = init.amount || "";
     r.taxEl.value = String(init.tax != null ? init.tax : 0);
     r.memoEl.value = init.memo || "";
+    if (init.biz) r.bizEl.value = init.biz;
+    syncBiz();
     r.taxEl.addEventListener("change", () => { r.taxTouched = true; });
     r.sideEl.addEventListener("change", updateBalance);
     r.amountEl.addEventListener("input", updateBalance);
@@ -324,15 +353,17 @@ function mountVoucherForm(root, { voucher = null, onSaved, onCancel, onDeleted }
     if (detail) return;
     detail = true;
     simpleEls.forEach((e) => { e.hidden = true; });
+    bizAmtWrap.hidden = true;
     linesBox.hidden = false;
     if (fromLines) {
       const ds = fromLines.filter((l) => l.side === "debit");
       const cs = fromLines.filter((l) => l.side === "credit");
-      [...ds, ...cs].forEach((l) => addRow({ side: l.side, accId: l.accId, amount: l.amount ? String(l.amount) : "", tax: l.tax, memo: l.memo, taxSet: true }));
+      [...ds, ...cs].forEach((l) => addRow({ side: l.side, accId: l.accId, amount: l.amount ? String(l.amount) : "", tax: l.tax, memo: l.memo, taxSet: true, biz: l.biz === "biz" ? "biz" : "life" }));
     } else {
       const amt = amountEl.value;
-      addRow({ side: "debit", accId: debit.getValue().id, amount: amt, tax: taxEl.value, memo: memoEl.value.trim(), taxSet: true });
-      addRow({ side: "credit", accId: credit.getValue().id, amount: amt, tax: taxEl.value, taxSet: true });
+      const bz = bizEl.value === "biz" ? "biz" : "life";
+      addRow({ side: "debit", accId: debit.getValue().id, amount: amt, tax: taxEl.value, memo: memoEl.value.trim(), taxSet: true, biz: bz });
+      addRow({ side: "credit", accId: credit.getValue().id, amount: amt, tax: taxEl.value, taxSet: true, biz: bz });
     }
     q("addline").textContent = "＋ 行を追加";
   }
@@ -343,6 +374,7 @@ function mountVoucherForm(root, { voucher = null, onSaved, onCancel, onDeleted }
     rowsHost.innerHTML = "";
     linesBox.hidden = true;
     simpleEls.forEach((e) => { e.hidden = false; });
+    updateBizUI();
   }
 
   function addLine() {
@@ -398,6 +430,9 @@ function mountVoucherForm(root, { voucher = null, onSaved, onCancel, onDeleted }
         amountEl.value = String(dl.amount);
         taxEl.value = String(dl.tax || 0);
         taxTouched = true;
+        const plLine = voucher.lines.find((l) => isPLAcc(state.accountsById[l.accId]));
+        bizEl.value = plLine && plLine.biz === "biz" ? "biz" : "life";
+        bizTouched = true;
       } else {
         enterDetail(voucher.lines);
       }
@@ -415,6 +450,7 @@ function mountVoucherForm(root, { voucher = null, onSaved, onCancel, onDeleted }
     debit.clear(); credit.clear(); field.clear(); party.clear();
     memoEl.value = ""; amountEl.value = ""; markEl.value = "";
     taxEl.value = "0"; taxTouched = false;
+    bizEl.value = "life"; bizAmtEl.value = ""; bizTouched = false; updateBizUI();
     dateEl.value = defaultDate();
     updateSeq();
     refreshParty(party.getValue(), true);
@@ -433,10 +469,19 @@ function mountVoucherForm(root, { voucher = null, onSaved, onCancel, onDeleted }
       if (!(amount > 0)) return { error: "金額は1円以上の数字で入れてください。" };
       const tax = parseInt(taxEl.value, 10);
       const memo = memoEl.value.trim();
-      return { lines: [
-        { side: "debit", accId: d, amount, tax, memo, tags: [], biz: "life" },
-        { side: "credit", accId: c, amount, tax, memo: "", tags: [], biz: "life" }
-      ] };
+      const mode = bizEl.value;
+      const out = [];
+      for (const [side, accId, m] of [["debit", d, memo], ["credit", c, ""]]) {
+        if (mode === "split" && isPLAcc(state.accountsById[accId])) {
+          const b = parseAmount(bizAmtEl.value);
+          if (!(b > 0 && b < amount)) return { error: "按分のときは、事業分の金額を、1円以上で合計より小さい数字で入れてください。" };
+          out.push({ side, accId, amount: b, tax, memo: m, tags: [], biz: "biz" },
+            { side, accId, amount: amount - b, tax, memo: m, tags: [], biz: "life" });
+        } else {
+          out.push({ side, accId, amount, tax, memo: m, tags: [], biz: mode === "biz" ? "biz" : "life" });
+        }
+      }
+      return { lines: out };
     }
     const lines = [];
     for (let i = 0; i < rows.length; i++) {
@@ -445,7 +490,7 @@ function mountVoucherForm(root, { voucher = null, onSaved, onCancel, onDeleted }
       const amount = parseAmount(r.amountEl.value);
       if (!accId) return { error: `${i + 1}行目の科目を選んでください。` };
       if (!(amount > 0)) return { error: `${i + 1}行目の金額は、1円以上の数字で入れてください。` };
-      lines.push({ side: r.sideEl.value, accId, amount, tax: parseInt(r.taxEl.value, 10), memo: r.memoEl.value.trim(), tags: [], biz: "life" });
+      lines.push({ side: r.sideEl.value, accId, amount, tax: parseInt(r.taxEl.value, 10), memo: r.memoEl.value.trim(), tags: [], biz: r.bizEl.value === "biz" ? "biz" : "life" });
     }
     const dsum = lines.filter((l) => l.side === "debit").reduce((s, l) => s + l.amount, 0);
     const csum = lines.filter((l) => l.side === "credit").reduce((s, l) => s + l.amount, 0);
@@ -458,10 +503,10 @@ function mountVoucherForm(root, { voucher = null, onSaved, onCancel, onDeleted }
 
   function applyBiz(lines) {
     const isPL = (a) => a && (a.kind === "expense" || a.kind === "revenue");
-    const plFirst = lines.map((l) => state.accountsById[l.accId]).find(isPL);
+    const plFirst = lines.find((l) => isPL(state.accountsById[l.accId]));
     lines.forEach((l) => {
       const a = state.accountsById[l.accId];
-      l.biz = isPL(a) ? a.biz || "life" : plFirst ? plFirst.biz || "life" : "life";
+      l.biz = isPL(a) ? l.biz || "life" : plFirst ? plFirst.biz || l.biz || "life" : "life";
     });
   }
 
@@ -842,12 +887,62 @@ function drawSelBar() {
   bar.innerHTML = `<span><strong>${vs.length}件</strong>を選択中（借方計 ¥${yen(total)}）</span>
     <button type="button" class="sub" id="sel-prev">選んだ分をプレビュー</button>
     <button type="button" class="sub" id="sel-edit">順に修正</button>
+    <button type="button" class="sub" id="sel-biz">事業にする</button>
+    <button type="button" class="sub" id="sel-life">生活にする</button>
     <button type="button" class="danger" id="sel-del">まとめて削除</button>
     <button type="button" class="sub" id="sel-clear">選択を解除</button>`;
   $("sel-clear").addEventListener("click", () => { sel.clear(); lastSelId = null; drawList(); });
   $("sel-prev").addEventListener("click", previewSelected);
   $("sel-edit").addEventListener("click", editSelected);
   $("sel-del").addEventListener("click", deleteSelected);
+  $("sel-biz").addEventListener("click", () => retagSelected("biz"));
+  $("sel-life").addEventListener("click", () => retagSelected("life"));
+}
+
+// 選んだ仕訳の「事業／生活」をまとめて付け替える（直前に自動でバックアップ）
+function retagSelected(mode) {
+  const vs = selectedVouchers();
+  if (!vs.length) return;
+  const label = mode === "biz" ? "事業" : "生活";
+  const changing = vs.filter((vo) => vo.lines.some((l) => (l.biz === "biz" ? "biz" : "life") !== mode));
+  const closed = [...new Set(vs.map((vo) => vo.month))].filter((m) => isClosed(m));
+  openModal(`<div class="dialog" role="dialog" aria-modal="true">
+    <h2>${vs.length}件の仕訳を「${label}」にします</h2>
+    <p class="note">そのうち、いまと違う印になるのは${changing.length}件です。仕訳の中の損益の科目（経費・売上）の印が、すべて「${label}」に変わります。1つの仕訳に事業と生活が混ざっているものも、すべて「${label}」になります。</p>
+    <p class="note">金額や科目は変わりません。P/Lの「Ⅰ 事業」と「Ⅳ 生活費」への振り分けだけが変わります。</p>
+    <p class="note">実行の直前に、全データのバックアップ（JSONファイル）が自動でダウンロードされます。</p>
+    ${closed.length ? `<p class="note"><strong>${esc(closed.join("・"))}月度は締め済みです。</strong>P/Lの振り分けが、締めたときと変わることがあります。</p>` : ""}
+    <p id="rt-msg" class="note"></p>
+    <div class="actions">
+      <button type="button" class="sub" id="rt-cancel">やめる</button>
+      <button type="button" class="primary" id="rt-ok">バックアップして「${label}」にする</button>
+    </div></div>`);
+  $("rt-cancel").addEventListener("click", closeModal);
+  $("rt-ok").addEventListener("click", async () => {
+    $("rt-ok").disabled = true; $("rt-cancel").disabled = true;
+    const m = $("rt-msg");
+    try {
+      m.textContent = "バックアップを保存しています…";
+      await downloadFullBackup("my-ledger-backup-事業生活の付け替え前");
+      for (let i = 0; i < vs.length; i += 400) {
+        m.textContent = `付け替えています… ${Math.min(i + 400, vs.length)}／${vs.length}`;
+        const batch = writeBatch(db);
+        vs.slice(i, i + 400).forEach((vo) => batch.update(doc(col("vouchers"), vo.id), {
+          lines: vo.lines.map((l) => { const x = { ...l, biz: mode }; delete x._acc; return x; }), updatedAt: serverTimestamp()
+        }));
+        await batch.commit();
+      }
+      await loadVouchers();
+      sel.clear(); lastSelId = null;
+      closeModal();
+      renderEntry();
+    } catch (err) {
+      console.error("[事業/生活の付け替え]", err);
+      m.textContent = "失敗しました：" + (err.code || err.message) + "（途中まで付け替わっている可能性があります。一覧を確認してください）";
+      $("rt-cancel").disabled = false; $("rt-cancel").textContent = "閉じる";
+      loadVouchers().then(drawList).catch(() => {});
+    }
+  });
 }
 
 function previewSelected() {
@@ -970,7 +1065,7 @@ function voucherRows(vo, alt, check) {
       <td>${chipOf(credits[i])}</td>
       <td>${first && fd ? `<span class="fd"><b>${esc(fd.no)}</b>${esc(hk(fd.name))}</span>` : ""}</td>
       <td>${first ? esc(hk(vo._partyName || partyLabel(vo.partyId))) : ""}</td>
-      <td class="memo">${esc(hk([...new Set([debits[i] && debits[i].memo, credits[i] && credits[i].memo].filter(Boolean))].join(" ／ ")))}${first && vo.late ? ` <span class="chip late">後日記帳 ${esc(fmtMD(vo.entryDate))}</span>` : ""}${first && firstLine.biz === "biz" ? ' <span class="chip biz">事業</span>' : ""}</td>
+      <td class="memo">${esc(hk([...new Set([debits[i] && debits[i].memo, credits[i] && credits[i].memo].filter(Boolean))].join(" ／ ")))}${first && vo.late ? ` <span class="chip late">後日記帳 ${esc(fmtMD(vo.entryDate))}</span>` : ""}${(() => { const l = [debits[i], credits[i]].find((x) => x && x.biz === "biz" && ["expense", "revenue"].includes((state.accountsById[x.accId] || {}).kind)); return l ? ' <span class="chip biz">事業</span>' : ""; })()}</td>
       <td class="amt num ${isRev ? "inc" : ""}">${first ? (isRev ? "+" : "") + yen(total) : ""}</td>
       <td class="mk">${first ? esc(vo.mark || "") : ""}</td>
     </tr>`;

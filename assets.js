@@ -1,6 +1,6 @@
 // 月割り償却（手順I2a）：資産の登録と予定表
-import { state, col, db, loadAssets, loadVouchers, fetchMonthVouchers, isClosed } from "./state.js?v=0.2I6a";
-import { $, esc, yen, ymd, openModal, closeModal, showError } from "./util.js?v=0.2I6a";
+import { state, col, db, loadAssets, loadVouchers, fetchMonthVouchers, isClosed } from "./state.js?v=0.2I6b";
+import { $, esc, yen, ymd, openModal, closeModal, showError } from "./util.js?v=0.2I6b";
 import { doc, addDoc, updateDoc, writeBatch, arrayUnion, serverTimestamp } from "https://www.gstatic.com/firebasejs/13.4.0/firebase-firestore.js";
 
 // ---------- 計算（画面に依存しない部分） ----------
@@ -151,6 +151,7 @@ function openForm(a) {
       <label class="m-count m-firstDiff">切り上げ／切り捨て<select id="as-rmode"${dis}><option value="floor"${v.roundMode === "floor" ? " selected" : ""}>切り捨て</option><option value="ceil"${v.roundMode === "ceil" ? " selected" : ""}>切り上げ</option></select></label>
       <label class="m-count">端数を寄せる月<select id="as-rem"${dis}><option value="last"${v.remainderTo === "last" ? " selected" : ""}>最終月</option><option value="first"${v.remainderTo === "first" ? " selected" : ""}>初月</option></select></label>
       <label>手で記帳済みの月まで（なければ空欄）<input type="month" id="as-booked" value="${esc(toInput(v.bookedThrough))}"${isEdit && locked ? " disabled" : ""}></label>
+      <label>事業／生活（償却費の振り分け）<select id="as-biz"><option value="life"${(v.biz || "life") === "life" ? " selected" : ""}>生活</option><option value="biz"${v.biz === "biz" ? " selected" : ""}>事業</option></select></label>
       <label>状態<select id="as-status">${Object.entries(STATUS).map(([k, t]) => `<option value="${k}"${k === v.status ? " selected" : ""}>${t}</option>`).join("")}</select></label>
     </div>
     <p id="as-msg" class="note"></p>
@@ -174,7 +175,7 @@ function openForm(a) {
     startMonth: toApp(g("as-start")) || (g("as-date") ? toApp(g("as-date").slice(0, 7)) : ""),
     count: num("as-count"), monthly: num("as-monthly"), firstAmount: num("as-first"), perDay: num("as-perday"),
     roundUnit: Number(g("as-unit")), roundMode: g("as-rmode"), remainderTo: g("as-rem"),
-    bookedThrough: toApp(g("as-booked")), status: g("as-status"), posted: a ? a.posted || [] : []
+    bookedThrough: toApp(g("as-booked")), status: g("as-status"), biz: g("as-biz"), posted: a ? a.posted || [] : []
   });
   let cur = null;
   const redraw = () => {
@@ -221,7 +222,7 @@ function openForm(a) {
     try {
       const data = { ...cur, updatedAt: serverTimestamp() };
       if (isEdit) {
-        const keep = locked ? { name: cur.name, memo: cur.memo, status: cur.status, updatedAt: serverTimestamp() } : data;
+        const keep = locked ? { name: cur.name, memo: cur.memo, status: cur.status, biz: cur.biz, updatedAt: serverTimestamp() } : data;
         await updateDoc(doc(col("assets"), a.id), keep);
       } else await addDoc(col("assets"), { ...data, posted: [], createdAt: serverTimestamp() });
       closeModal();
@@ -307,7 +308,7 @@ export async function postDrafts(picks, onStep) {
     const a = p.asset;
     const id = `depr_${a.id}_${p.month.replace(".", "_")}`;
     const today = ymd(new Date());
-    const biz = (state.accountsById[a.expenseAccId] || {}).biz || "life";
+    const biz = a.biz || (state.accountsById[a.expenseAccId] || {}).biz || "life";
     const memo = `${a.name} 月割り償却 ${p.n}/${p.total}`;
     const voucher = {
       month: p.month, seq: nextSeq[p.month]++, date: p.date, entryDate: today, late: today > p.date,
@@ -422,7 +423,7 @@ export async function postLump(a, date, accId, note) {
   const id = `depr_${a.id}_lump`;
   const today = ymd(new Date());
   const memo = note || `${a.name} 残額一括処理`;
-  const biz = (state.accountsById[accId] || {}).biz || "life";
+  const biz = a.biz || (state.accountsById[accId] || {}).biz || "life";
   const batch = writeBatch(db);
   batch.set(doc(col("vouchers"), id), {
     month, seq, date, entryDate: today, late: today > date, fieldId: "", partyId: "", mark: "", auto: "depreciation", lump: true, assetId: a.id,

@@ -1,7 +1,7 @@
 // 試算表（科目ごとの 月初残高・借方・貸方・残高）
-import { state, loadAllVouchers } from "./state.js?v=0.2I6a";
-import { $, esc, yen, accChip, shiftMonth, showError } from "./util.js?v=0.2I6a";
-import { CATEGORIES } from "./seed.js?v=0.2I6a";
+import { state, loadAllVouchers } from "./state.js?v=0.2I6b";
+import { $, esc, yen, accChip, shiftMonth, showError } from "./util.js?v=0.2I6b";
+import { CATEGORIES } from "./seed.js?v=0.2I6b";
 
 // "26.11" → 通し番号（月ごとに +1）
 const idxOf = (m) => { const [y, mm] = m.split(".").map((x) => parseInt(x, 10)); return y * 12 + (mm - 1); };
@@ -83,15 +83,25 @@ export async function renderTrial() {
   draw(list);
 }
 
+// 事業だけ／生活だけ：損益の科目（収益・経費）の明細だけを、印で絞る。貸借の科目は出さない
+function scoped(list, scope) {
+  if (scope === "all") return list;
+  return list.map((v) => ({ ...v, lines: (v.lines || []).filter((l) => {
+    const a = state.accountsById[l.accId];
+    return a && (a.kind === "revenue" || a.kind === "expense") && ((l.biz === "biz") === (scope === "biz"));
+  }) }));
+}
+
 function draw(list) {
   const t = state.tb;
+  const scope = t.scope || "all";
   const [S, E] = periodOf();
-  const { rows, allDr, allCr, pl } = computeTrial(list, state.accountsById, S, E);
+  const { rows, allDr, allCr, pl } = computeTrial(scoped(list, scope), state.accountsById, S, E);
   const all = Object.values(rows);
   const visible = (r) => !t.hideZero || r.open || r.dr || r.cr || r.bal;
   const periodDr = all.reduce((s, r) => s + r.dr, 0);
   const periodCr = all.reduce((s, r) => s + r.cr, 0);
-  const okAll = periodDr === periodCr && allDr === allCr;
+  const okAll = scope !== "all" || (periodDr === periodCr && allDr === allCr);
 
   // 表の行
   let body = "";
@@ -122,7 +132,7 @@ function draw(list) {
   const gapOpen = A.open - L.open - eq.open, gapEnd = A.bal - L.bal - eq.bal;
   const eqOk = gapOpen === 0 && gapEnd === 0;
   const eqRow = (name, o, b, cls) => `<tr class="${cls || ""}"><td>${esc(name)}</td><td class="r num">${num(o)}</td><td class="r num muted">―</td><td class="r num muted">―</td><td class="r num" style="font-weight:700">${num(b)}</td><td class="r num">${diffHtml(b - o)}</td></tr>`;
-  if (all.length) {
+  if (all.length && scope === "all") {
     body += `<tr class="grp"><td colspan="6">純資産の部（損益の繰越を含む）</td></tr>` +
       eqRow("前期までの損益（繰越）", eqOpen.prev, eqEnd.prev) +
       eqRow("当期純損益（その年の1月〜）", eqOpen.cur, eqEnd.cur) +
@@ -149,9 +159,10 @@ function draw(list) {
       <button type="button" class="navbtn" id="tb-next" aria-label="次へ" ${t.mode === "custom" ? "disabled" : ""}>▶</button>
       <span class="note">試算表</span>
       <span class="spacer"></span>
+      <div class="seg" id="tb-scope">${[["all", "全体"], ["biz", "事業だけ"], ["life", "生活だけ"]].map(([k, n]) => `<button type="button" data-scope="${k}" class="${scope === k ? "on" : ""}">${n}</button>`).join("")}</div>
       <div class="seg" id="tb-seg">${modes.map(([k, n]) => `<button type="button" data-mode="${k}" class="${t.mode === k ? "on" : ""}">${n}</button>`).join("")}</div>
       ${t.mode === "custom" ? `<input type="month" id="tb-from" value="${ym(S)}"> 〜 <input type="month" id="tb-to" value="${ym(E)}">` : ""}
-      <span class="${okAll ? "okbadge" : "warnbadge"}">${okAll ? "貸借一致 ✓" : `貸借が合いません（差額 ¥${yen(Math.abs(allDr - allCr) || Math.abs(periodDr - periodCr))}）`}</span>
+      <span class="${okAll ? "okbadge" : "warnbadge"}">${scope !== "all" ? "損益の科目だけ" : okAll ? "貸借一致 ✓" : `貸借が合いません（差額 ¥${yen(Math.abs(allDr - allCr) || Math.abs(periodDr - periodCr))}）`}</span>
       <button type="button" class="sub" id="tb-csv">CSV</button>
       <button type="button" class="sub" id="tb-print">印刷</button>
     </div>
@@ -164,7 +175,7 @@ function draw(list) {
           <thead><tr><th>科目</th><th class="r">月初残高</th><th class="r">借方</th><th class="r">貸方</th><th class="r">残高</th><th class="r">増減</th></tr></thead>
           <tbody>${body}
             <tr class="tot"><td>借方合計 ＝ 貸方合計</td><td></td><td class="r num">${yen(periodDr)}</td><td class="r num">${yen(periodCr)}</td>
-              <td colspan="2" style="text-align:right">${periodDr === periodCr ? "一致 ✓" : "不一致"}</td></tr>
+              <td colspan="2" style="text-align:right">${scope !== "all" ? "" : periodDr === periodCr ? "一致 ✓" : "不一致"}</td></tr>
           </tbody></table></div>
       </section>
       <aside class="tbside">
@@ -191,6 +202,12 @@ function draw(list) {
   });
   $("tb-prev").addEventListener("click", () => { t.month = shiftMonth(t.month, t.mode === "quarter" ? -3 : t.mode === "year" ? -12 : -1); redraw(); });
   $("tb-next").addEventListener("click", () => { t.month = shiftMonth(t.month, t.mode === "quarter" ? 3 : t.mode === "year" ? 12 : 1); redraw(); });
+  $("tb-scope").addEventListener("click", (e) => {
+    const b = e.target.closest("button[data-scope]");
+    if (!b) return;
+    t.scope = b.dataset.scope;
+    redraw();
+  });
   $("tb-seg").addEventListener("click", (e) => {
     const b = e.target.closest("button[data-mode]");
     if (!b) return;

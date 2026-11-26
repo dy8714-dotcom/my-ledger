@@ -47,7 +47,7 @@ export const state = {
   lastBackupAt: null,
   backupSnoozed: false,
   st: { month: null, cmp: "prev", cmpMonth: null, scope: "all" },
-  tb: { month: null, mode: "month", from: null, to: null, hideZero: true, byNo: false }
+  tb: { month: null, mode: "month", from: null, to: null, hideZero: true, byNo: false, scope: "all" }
 };
 
 export function col(name) {
