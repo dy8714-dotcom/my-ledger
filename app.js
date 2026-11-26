@@ -1,14 +1,15 @@
 // マイ帳簿サイト（ログインと、メニューの切り替え）
 import { GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged }
   from "https://www.gstatic.com/firebasejs/13.4.0/firebase-auth.js";
-import { auth, state, loadAll, loadVouchers } from "./state.js?v=0.2I5a";
-import { $, esc, showError } from "./util.js?v=0.2I5a";
-import { renderSettings } from "./settings.js?v=0.2I5a";
-import { renderEntry } from "./entry.js?v=0.2I5a";
-import { renderTrial } from "./trial.js?v=0.2I5a";
-import { renderLedger } from "./ledger.js?v=0.2I5a";
-import { renderMonthEnd } from "./monthend.js?v=0.2I5a";
-import { renderBackupBanner } from "./backup.js?v=0.2I5a";
+import { auth, state, loadAll, loadVouchers } from "./state.js?v=0.2I6a";
+import { $, esc, showError } from "./util.js?v=0.2I6a";
+import { renderSettings } from "./settings.js?v=0.2I6a";
+import { renderEntry } from "./entry.js?v=0.2I6a";
+import { renderTrial } from "./trial.js?v=0.2I6a";
+import { renderLedger } from "./ledger.js?v=0.2I6a";
+import { renderBS, renderPL } from "./statements.js?v=0.2I6a";
+import { renderMonthEnd } from "./monthend.js?v=0.2I6a";
+import { renderBackupBanner } from "./backup.js?v=0.2I6a";
 
 $("btn-login").addEventListener("click", async () => {
   showError("");
@@ -51,6 +52,8 @@ function render() {
     b.classList.toggle("active", b.dataset.tab === state.tab));
   if (state.tab === "entry") return renderEntry();
   if (state.tab === "trial") return renderTrial();
+  if (state.tab === "bs") return renderBS();
+  if (state.tab === "pl") return renderPL();
   if (state.tab === "ledger") return renderLedger();
   if (state.tab === "monthend") return renderMonthEnd();
   if (state.tab === "settings") return renderSettings();

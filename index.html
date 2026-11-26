@@ -4,14 +4,14 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>マイ帳簿サイト</title>
-<link rel="stylesheet" href="style.css?v=0.2I5a">
+<link rel="stylesheet" href="style.css?v=0.2I6a">
 </head>
 <body>
 <header>
   <h1>マイ帳簿サイト</h1>
   <div class="header-right">
     <span id="user-email" class="user"></span>
-    <span id="version" class="version">v0.2（手順I5a：Firestore内の控え）</span>
+    <span id="version" class="version">v0.2（手順I6a：B/S・P/L）</span>
     <button id="btn-logout" type="button" class="header-btn" hidden>ログアウト</button>
   </div>
 </header>
@@ -19,6 +19,8 @@
 <nav id="nav" hidden>
   <button type="button" data-tab="entry">記帳</button>
   <button type="button" data-tab="trial">試算表</button>
+  <button type="button" data-tab="bs">B/S</button>
+  <button type="button" data-tab="pl">P/L</button>
   <button type="button" data-tab="ledger">元帳・検索</button>
   <button type="button" data-tab="monthend">月末</button>
   <button type="button" data-tab="settings">設定</button>
@@ -37,6 +39,6 @@
 
 <div id="modal" hidden></div>
 
-<script type="module" src="app.js?v=0.2I5a"></script>
+<script type="module" src="app.js?v=0.2I6a"></script>
 </body>
 </html>
