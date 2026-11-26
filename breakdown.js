@@ -1,8 +1,8 @@
 // 貸借内訳（9章・I8a）：科目の残高と、内訳（取引先ごと・固定資産ごと）の合計を照合する
-import { state, col, loadAllVouchers, loadAssets } from "./state.js?v=0.2I10c";
-import { $, esc, yen, shiftMonth, showError, openModal, closeModal } from "./util.js?v=0.2I10c";
+import { state, col, loadAllVouchers, loadAssets } from "./state.js?v=0.2I10d";
+import { $, esc, yen, shiftMonth, showError, openModal, closeModal } from "./util.js?v=0.2I10d";
 import { setDoc, doc } from "https://www.gstatic.com/firebasejs/13.4.0/firebase-firestore.js";
-import { bsAt } from "./statements.js?v=0.2I10c";
+import { bsAt } from "./statements.js?v=0.2I10d";
 
 const idxOf = (m) => { const [y, mm] = m.split(".").map((x) => parseInt(x, 10)); return y * 12 + (mm - 1); };
 const labelOf = (idx) => `${2000 + Math.floor(idx / 12)}年${(idx % 12) + 1}月`;

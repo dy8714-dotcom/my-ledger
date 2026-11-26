@@ -1,19 +1,19 @@
 // マイ帳簿サイト（ログインと、メニューの切り替え）
 import { GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged }
   from "https://www.gstatic.com/firebasejs/13.4.0/firebase-auth.js";
-import { auth, state, loadAll, loadVouchers } from "./state.js?v=0.2I10c";
-import { $, esc, showError } from "./util.js?v=0.2I10c";
-import { renderSettings } from "./settings.js?v=0.2I10c";
-import { renderEntry } from "./entry.js?v=0.2I10c";
-import { renderTrial } from "./trial.js?v=0.2I10c";
-import { renderLedger } from "./ledger.js?v=0.2I10c";
-import { renderBS, renderPL } from "./statements.js?v=0.2I10c";
-import { renderCF } from "./cashflow.js?v=0.2I10c";
-import { renderAnnual } from "./annual.js?v=0.2I10c";
-import { renderBreakdown, refreshHeaderCheck } from "./breakdown.js?v=0.2I10c";
-import { renderMonthEnd } from "./monthend.js?v=0.2I10c";
-import { renderBackupBanner } from "./backup.js?v=0.2I10c";
-import "./print.js?v=0.2I10c";
+import { auth, state, loadAll, loadVouchers } from "./state.js?v=0.2I10d";
+import { $, esc, showError } from "./util.js?v=0.2I10d";
+import { renderSettings } from "./settings.js?v=0.2I10d";
+import { renderEntry } from "./entry.js?v=0.2I10d";
+import { renderTrial } from "./trial.js?v=0.2I10d";
+import { renderLedger } from "./ledger.js?v=0.2I10d";
+import { renderBS, renderPL } from "./statements.js?v=0.2I10d";
+import { renderCF } from "./cashflow.js?v=0.2I10d";
+import { renderAnnual } from "./annual.js?v=0.2I10d";
+import { renderBreakdown, refreshHeaderCheck } from "./breakdown.js?v=0.2I10d";
+import { renderMonthEnd } from "./monthend.js?v=0.2I10d";
+import { renderBackupBanner } from "./backup.js?v=0.2I10d";
+import "./print.js?v=0.2I10d";
 
 $("btn-login").addEventListener("click", async () => {
   showError("");

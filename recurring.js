@@ -1,9 +1,9 @@
 // 定期支払（I7a）：☆定額・★変動・◇年払い・◆外貨 の登録と、記帳画面の「未記帳のお知らせ」
-import { state, col, db, loadRecurring, loadAllVouchers } from "./state.js?v=0.2I10c";
-import { $, esc, hk, yen, parseAmount, ymd, openModal, closeModal, showError } from "./util.js?v=0.2I10c";
+import { state, col, db, loadRecurring, loadAllVouchers } from "./state.js?v=0.2I10d";
+import { $, esc, hk, yen, parseAmount, ymd, monthOf, openModal, closeModal, showError } from "./util.js?v=0.2I10d";
 import { doc, setDoc, deleteDoc, writeBatch, serverTimestamp } from "https://www.gstatic.com/firebasejs/13.4.0/firebase-firestore.js";
-import { fromTemplate } from "./patterns.js?v=0.2I10c";
-import { offReason, shiftBusiness } from "./holidays.js?v=0.2I10c";
+import { fromTemplate } from "./patterns.js?v=0.2I10d";
+import { offReason, shiftBusiness } from "./holidays.js?v=0.2I10d";
 
 export const MARKS = ["☆", "★", "◇", "◆"];
 const MARK_NAME = { "☆": "定額・毎月", "★": "金額が変わる・毎月", "◇": "年払い", "◆": "外貨建て・毎月" };
@@ -80,7 +80,9 @@ export function computeEstimate(recs, vouchers, span, todayM) {
       m: v.month, date: v.date || "", amt: (v.lines || []).filter((l) => l.side === "debit").reduce((x, l) => x + l.amount, 0)
     })).filter((h) => h.amt > 0).sort((a, b) => a.date.localeCompare(b.date));
     const win = hist.filter((h) => mi(h.m) >= cutoff);
-    const last = hist.length ? hist[hist.length - 1] : null;
+    // 直近実績は「今月より前の、最新の月」（今月分がもう払い済みでも、先月までの実績を見る）。無ければ今月分
+    const before = hist.filter((h) => mi(h.m) < mi(todayM));
+    const last = before.length ? before[before.length - 1] : hist.length ? hist[hist.length - 1] : null;
     let min, latest, avg, year;
     if (r.mark === "◇") {
       min = null;
@@ -181,7 +183,7 @@ function estimateHtml(est, span) {
     </div>
     <div class="tablewrap"><table class="tbl mtbl"><thead><tr><th>印</th><th>名前</th><th class="amt">最低ライン</th><th class="amt">直近実績</th><th class="amt">見込み</th><th class="amt">年間換算</th></tr></thead>
       <tbody>${rows}<tr class="tot"><td></td><td>合計</td><td class="amt num">${yen(est.min)}</td><td class="amt num">${yen(est.latest)}</td><td class="amt num">${yen(est.avg)}</td><td class="amt num">${yen(est.year)}</td></tr></tbody></table></div>
-    <p class="note">直近実績は、記帳済みの最新の月の金額です（◇は年額の月割り）。★の（　）は実績の最低〜最高。実績がまだ無いものは、登録してある目安の金額を使います。</p>` : `<p class="note">固定費の定期支払を登録すると、ここに見積もりが出ます。</p>`}
+    <p class="note">直近実績は、今月より前の、最新の月の金額です（先月分の記帳がなければ今月分）（◇は年額の月割り）。★の（　）は実績の最低〜最高。実績がまだ無いものは、登録してある目安の金額を使います。</p>` : `<p class="note">固定費の定期支払を登録すると、ここに見積もりが出ます。</p>`}
   </section>`;
 }
 
@@ -191,7 +193,7 @@ export async function renderRecurring() {
   let allV = [];
   try { allV = await loadAllVouchers(); } catch (err) { console.error("[見積もり]", err); }
   const span = state.recSpan || "12";
-  const est = computeEstimate(recs, allV, span, state.month);
+  const est = computeEstimate(recs, allV, span, monthOf(ymd(new Date())));
   const t = monthlyTotals(recs);
   const rows = recs.map((r) => `<tr data-id="${esc(r.id)}" class="${r.active === false || r.end ? "off" : ""}">
     <td class="num">${esc(r.mark || "")}</td><td>${esc(r.name)}</td>
