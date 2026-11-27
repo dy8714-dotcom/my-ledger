@@ -1,7 +1,7 @@
 // 給与入力（手順I11b）：給与明細と同じ並びで入力し、複合仕訳を1枚作る（kind="salary"）
-import { state, col, db, fetchMonthVouchers, loadAllVouchers, loadVouchers, isClosed } from "./state.js?v=0.2I11c";
-import { $, esc, yen, ymd, monthOf, showError } from "./util.js?v=0.2I11c";
-import { shiftBusiness } from "./holidays.js?v=0.2I11c";
+import { state, col, db, fetchMonthVouchers, loadAllVouchers, loadVouchers, isClosed } from "./state.js?v=0.2I11d";
+import { $, esc, yen, ymd, monthOf, showError } from "./util.js?v=0.2I11d";
+import { shiftBusiness } from "./holidays.js?v=0.2I11d";
 import { doc, getDoc, setDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/13.4.0/firebase-firestore.js";
 
 const accByNo = (no) => state.accounts.find((a) => a.no === no);
@@ -91,7 +91,11 @@ async function loadCfg() {
 const parseN = (s) => { const t = String(s).replace(/[,，\s¥円]/g, "").replace(/[０-９]/g, (c) => String.fromCharCode(c.charCodeAt(0) - 65248)).replace(/[−－ー]/g, "-"); const n = Number(t); return Number.isFinite(n) ? Math.round(n) : 0; };
 const accOptions = (sel) => state.accounts.map((a) => `<option value="${a.id}"${a.id === sel ? " selected" : ""}>${esc(accLabel(a))}</option>`).join("");
 
-let CFG = null, S = null, LIST = [], EXIST = null;
+let CFG = null, S = null, LIST = [], EXIST = null, PRESET = "";
+// 月末の画面などから、対象月を決めて給与タブを開く（month は "26.11" の形）
+export function presetSalary(month) { const [y, m] = month.split("."); PRESET = `20${y}-${String(m).padStart(2, "0")}`; }
+// 先月末の日付（支給日が属する月の、ひとつ前の月の最終日）
+export function lastDayOfPrevMonth(date) { const [y, m] = date.split("-").map(Number); return new Date(Date.UTC(y, m - 1, 0)).toISOString().slice(0, 10); }
 
 export async function renderSalary() {
   const host = $("view");
@@ -100,8 +104,9 @@ export async function renderSalary() {
   catch (err) { host.innerHTML = ""; showError("読み込みに失敗しました：" + (err.code || err.message)); return; }
   if (!S) {
     const t = ymd(new Date());
-    S = { ym: t.slice(0, 7), bonus: false, date: "", vals: {}, banks: CFG.banks.map((a) => ({ accId: a, amount: "", auto: true })), extra: [], slip: "" };
+    S = { ym: t.slice(0, 7), bonus: false, date: "", vals: {}, banks: CFG.banks.map((a) => ({ accId: a, amount: "", auto: true })), extra: [], slip: "", recover: "" };
   }
+  if (PRESET) { S.ym = PRESET; S.date = ""; PRESET = ""; }
   if (!S.date) S.date = defaultPayDate(S.ym, CFG.payDay);
   await checkExisting();
   draw(host);
@@ -127,7 +132,9 @@ function draw(host) {
     </div>
     <p class="note" id="sal-exist"></p>
     <div class="salgrid">
-      <div class="salbox"><h4>支給</h4><div class="salg">${grp("pay")}</div><div class="saltot"><span>給与支給額計</span><span id="sal-pay">0</span></div></div>
+      <div class="salbox"><h4>支給</h4><div class="salg">${grp("pay")}</div><div class="salg" style="margin-top:6px"><label>仮払交通費（先月分）を回収</label><input type="text" inputmode="numeric" id="sal-rec" value=""></div>
+        <p class="note" id="sal-recnote"></p>
+        <div class="saltot"><span>給与支給額計</span><span id="sal-pay">0</span></div></div>
       <div class="salbox"><h4>控除</h4><div class="salg">${grp("ded")}</div><div class="saltot"><span>控除額計</span><span id="sal-ded">0</span></div></div>
       <div class="salbox"><h4>振込</h4><div class="salg" id="sal-banks"></div>
         <div class="saltot"><span>当月支給額</span><span id="sal-net">0</span></div>
@@ -144,10 +151,11 @@ function draw(host) {
     <details style="margin-top:16px"><summary>入力欄の設定（項目の追加・削除、勤務先、振込先）</summary><div id="sal-cfg"></div></details>
   </section>`;
   drawBanks(); drawExtra(); drawCfg(); recalc();
-  $("sal-ym").addEventListener("change", async (e) => { S.ym = e.target.value || S.ym; S.date = defaultPayDate(S.ym, CFG.payDay); $("sal-date").value = S.date; await checkExisting(); recalc(); });
-  $("sal-date").addEventListener("change", async (e) => { S.date = e.target.value; await checkExisting(); recalc(); });
+  $("sal-ym").addEventListener("change", async (e) => { S.ym = e.target.value || S.ym; S.recover = ""; S.date = defaultPayDate(S.ym, CFG.payDay); $("sal-date").value = S.date; await checkExisting(); recalc(); });
+  $("sal-date").addEventListener("change", async (e) => { S.date = e.target.value; S.recover = ""; await checkExisting(); recalc(); });
   $("sal-bonus").addEventListener("change", async (e) => { S.bonus = e.target.value === "1"; await checkExisting(); recalc(); });
   $("sal").querySelectorAll("input[data-k]").forEach((i) => i.addEventListener("input", () => { S.vals[i.dataset.k] = parseN(i.value) || ""; recalc(); }));
+  $("sal-rec").addEventListener("input", (e) => { S.recover = e.target.value.trim() === "" ? "" : parseN(e.target.value); recalc(); });
   $("sal-slip").addEventListener("input", (e) => { S.slip = e.target.value; recalc(); });
   $("sal-addx").addEventListener("click", () => { S.extra.push({ side: "debit", accId: "", amount: "", memo: "" }); drawExtra(); recalc(); });
   $("sal-save").addEventListener("click", save);
@@ -183,8 +191,14 @@ function drawExtra() {
   $("sal-extra").querySelectorAll("[data-xdel]").forEach((x) => x.addEventListener("click", () => { S.extra.splice(+x.dataset.xdel, 1); drawExtra(); recalc(); }));
 }
 
+// 通勤手当は「先月分の仮払交通費」を回収する。先月末の残高を台帳から計算し、直接直したときはその額を使う
+function recoverBase() {
+  const auto = balance25(LIST, lastDayOfPrevMonth(S.date), EXIST && EXIST.id);
+  const manual = S.recover !== "" && S.recover !== undefined && S.recover !== null;
+  return { auto, use: manual ? Math.max(0, Math.round(Number(S.recover) || 0)) : Math.max(0, auto), manual };
+}
 function current() {
-  const bal = balance25(LIST, S.date, EXIST && EXIST.id);
+  const bal = recoverBase().use;
   // 振込が1口座で、自分で書き換えていなければ、差引を自動で入れる
   const r0 = buildSalary({ ...S, bonus: S.bonus }, CFG, bal);
   if (S.banks.length === 1 && S.banks[0].auto) S.banks[0].amount = r0.net || "";
@@ -195,6 +209,10 @@ function recalc() {
   if (!$("sal")) return;
   const r = current();
   $("sal-pay").textContent = "¥" + yen(r.pay); $("sal-ded").textContent = "¥" + yen(r.ded); $("sal-net").textContent = "¥" + yen(r.net);
+  const rb = recoverBase(), rc = $("sal-rec");
+  if (document.activeElement !== rc) rc.value = rb.manual ? S.recover : rb.use;
+  const pm = lastDayOfPrevMonth(S.date).slice(5, 7).replace(/^0/, "");
+  $("sal-recnote").textContent = rb.manual ? `直接入れた額を使います（台帳では${pm}月末の残高 ¥${yen(Math.max(0, rb.auto))}）。空にすると自動に戻ります。` : `台帳から自動：${pm}月末の仮払交通費の残高です。直接直せます。回収したぶんを引いた残りが雑収入になります。`;
   const bi = $("sal-banks").querySelector('input[data-f="amt"]');
   if (bi && S.banks.length === 1 && S.banks[0].auto && document.activeElement !== bi) bi.value = S.banks[0].amount;
   const slip = parseN(S.slip);

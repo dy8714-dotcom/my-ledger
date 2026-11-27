@@ -1,10 +1,11 @@
 // 月末（手順I3）：金融資産の評価替え
-import { state, col, db, loadAllVouchers, loadVouchers, fetchMonthVouchers, loadClosings, isClosed, loadAssets } from "./state.js?v=0.2I11c";
-import { pendingDrafts } from "./assets.js?v=0.2I11c";
-import { monthStatus } from "./recurring.js?v=0.2I11c";
-import { downloadFullBackup, makeCopy, saveBackupToDrive } from "./backup.js?v=0.2I11c";
-import { $, esc, yen, ymd, hk, shiftMonth, monthOf, WD, showError } from "./util.js?v=0.2I11c";
+import { state, col, db, loadAllVouchers, loadVouchers, fetchMonthVouchers, loadClosings, isClosed, loadAssets } from "./state.js?v=0.2I11d";
+import { pendingDrafts } from "./assets.js?v=0.2I11d";
+import { monthStatus } from "./recurring.js?v=0.2I11d";
+import { downloadFullBackup, makeCopy, saveBackupToDrive } from "./backup.js?v=0.2I11d";
+import { $, esc, yen, ymd, hk, shiftMonth, monthOf, WD, showError } from "./util.js?v=0.2I11d";
 import { doc, getDocs, writeBatch, setDoc, deleteField, serverTimestamp, arrayUnion } from "https://www.gstatic.com/firebasejs/13.4.0/firebase-firestore.js";
+import { presetSalary } from "./salary.js?v=0.2I11d";
 
 const EVAL_NOS = [26, 27, 28, 29, 30]; // 評価替えの対象（金融資産）
 // 評価益・評価損の科目：仮想通貨＝80/81、そのほか（株）＝82/83
@@ -248,6 +249,9 @@ async function renderClose(view) {
   const recSt = monthStatus(state.recurring || [], month, all.filter((v) => v.month === month), "9999-12-31");
   const recTodo = recSt.filter((s) => !s.done);
   const okRec = recTodo.length === 0;
+  // 給与：その月度に、給与の入力画面で作った仕訳（種別：給与）があるか（賞与は数えない）
+  const salV = all.find((v) => v.month === month && v.kind === "salary" && !v.deleted && !/^bonus_/.test(v.id || ""));
+  const okSal = !!salV;
   const okDep = drafts.length === 0, okEval = evalMiss.length === 0;
   const mark = (ok) => (ok ? `<span class="ok">✓</span>` : `<span class="ng">⚠</span>`);
   const changed = closed ? diffBalances(closing.balances, now) : [];
@@ -262,6 +266,7 @@ async function renderClose(view) {
       <h3><span class="bar"></span>締めのチェックリスト（${esc(month)}月度：${esc(end)}まで）</h3>
       <div class="tablewrap"><table class="tbl" style="min-width:0"><tbody>
         <tr><td style="width:40px">${mark(okRec)}</td><td>定期支払（☆★◇◆）がすべて記帳されている</td><td class="note">${!recSt.length ? "この月度の定期支払はありません" : okRec ? `${recSt.length}件すべて記帳済み` : `未記帳が${recTodo.length}件：${recTodo.map((x) => esc((x.rec.mark || "") + x.rec.name)).join("、")}　<button type="button" class="sub" id="cl-rec-go">記帳画面で確認する</button>`}</td></tr>
+        <tr><td>${mark(okSal)}</td><td>給与を入力して、仕訳を作った</td><td class="note">${okSal ? `記帳済み（${esc(salV.date)}）` : `まだありません。<button type="button" class="sub" id="cl-sal-go">給与タブで入力する</button>`}</td></tr>
         <tr><td>${mark(okDep)}</td><td>月割り償却の仕訳を登録した</td><td class="note">${okDep ? "未計上なし" : `未計上が${drafts.length}件あります（記帳画面の上の「確認する」から登録）`}</td></tr>
         <tr><td>${mark(okEval)}</td><td>金融資産の評価替えをした</td><td class="note">${okEval ? "残高のある科目はすべて入力済み" : `未入力：${evalMiss.map((a) => esc(a.no + a.name)).join("、")}（「評価替え」タブ）`}</td></tr>
         <tr><td><input type="checkbox" id="cl-m2" ${manual.points ? "checked" : ""} ${closed ? "disabled" : ""}></td><td>ポイントの残高合わせ（任意）</td><td class="note">残高合わせの機能はまだないので、必要なら手で記帳してチェックします</td></tr>
@@ -276,7 +281,7 @@ async function renderClose(view) {
           <table class="tbl" style="min-width:0"><thead><tr><th>科目</th><th class="amt">締めた時</th><th class="amt">いま</th><th class="amt">差</th></tr></thead><tbody>
           ${changed.map((c) => { const a = state.accountsById[c.accId] || {}; return `<tr><td>${esc(a.no)} ${esc(hk(a.name || c.accId))}</td><td class="amt">${yen(c.saved)}</td><td class="amt">${yen(c.now)}</td><td class="amt">${c.now - c.saved > 0 ? "+" : "−"}${yen(Math.abs(c.now - c.saved))}</td></tr>`; }).join("")}</tbody></table></div>` : `<p class="ok">✓ 締めた時の残高と、いまの計算結果は一致しています。</p>`}
         <div class="actions" style="justify-content:flex-start"><button type="button" class="danger" id="cl-reopen">締めを解除する</button></div>`
-      : `<p id="cl-msg" class="note">${okRec && okDep && okEval && okBal ? "すべてそろっています。" : "そろっていない項目があります。確認してから締めてください。"}</p>
+      : `<p id="cl-msg" class="note">${okRec && okSal && okDep && okEval && okBal ? "すべてそろっています。" : "そろっていない項目があります。確認してから締めてください。"}</p>
         <div class="actions" style="justify-content:flex-start"><button type="button" class="primary" id="cl-close">${esc(month)}月度を締める</button></div>
         <p class="note">締めると、その月の全科目の残高を「控え」として保存します。締めたあとにその月へ記帳すると確認画面が出て、控えとずれると「締めた後に変わった」と表示します。</p>`}
     </section>
@@ -305,10 +310,12 @@ async function renderClose(view) {
     });
   }
   if ($("cl-rec-go")) $("cl-rec-go").addEventListener("click", async () => { state.month = month; try { await loadVouchers(); } catch (err) { console.error(err); } document.querySelector('#nav [data-tab="entry"]').click(); });
+  if ($("cl-sal-go")) $("cl-sal-go").addEventListener("click", () => { presetSalary(month); document.querySelector('#nav [data-tab="salary"]').click(); });
   if ($("cl-m2")) $("cl-m2").addEventListener("change", (e) => { manual.points = e.target.checked; });
   if ($("cl-close")) $("cl-close").addEventListener("click", async () => {
     const miss = [];
     if (!okRec) miss.push("定期支払の記帳");
+    if (!okSal) miss.push("給与の記帳");
     if (!okDep) miss.push("月割り償却");
     if (!okEval) miss.push("評価替え");
     if (!okNeg) miss.push("現金・預金のマイナス");
