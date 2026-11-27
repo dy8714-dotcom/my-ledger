@@ -1,7 +1,7 @@
 // 給与入力（手順I11b）：給与明細と同じ並びで入力し、複合仕訳を1枚作る（kind="salary"）
-import { state, col, db, fetchMonthVouchers, loadAllVouchers, loadVouchers, isClosed } from "./state.js?v=0.2I11b";
-import { $, esc, yen, ymd, monthOf, showError } from "./util.js?v=0.2I11b";
-import { shiftBusiness } from "./holidays.js?v=0.2I11b";
+import { state, col, db, fetchMonthVouchers, loadAllVouchers, loadVouchers, isClosed } from "./state.js?v=0.2I11c";
+import { $, esc, yen, ymd, monthOf, showError } from "./util.js?v=0.2I11c";
+import { shiftBusiness } from "./holidays.js?v=0.2I11c";
 import { doc, getDoc, setDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/13.4.0/firebase-firestore.js";
 
 const accByNo = (no) => state.accounts.find((a) => a.no === no);
@@ -16,11 +16,11 @@ export function defaultCfg() {
   return {
     items: [
       mk("base", "基準賃金計", "pay", 90, "credit"), mk("extra", "基準外賃金計", "pay", 90, "credit"), mk("commute", "通勤手当", "pay", 90, "credit", true),
-      mk("kenpo", "健康保険料", "ded", 95, "debit"), mk("nenkin", "厚生年金", "ded", 95, "debit"), mk("koyo", "雇用保険料", "ded", 95, "debit"),
+      mk("kenpo", "健康保険料", "ded", 95, "debit"), mk("tokutei", "特定保険料", "ded", 95, "debit"), mk("kaigo", "介護保険料", "ded", 95, "debit"), mk("nenkin", "厚生年金", "ded", 95, "debit"), mk("koyo", "雇用保険料", "ded", 95, "debit"),
       mk("shotoku", "所得税", "ded", 94, "debit"), mk("juminzei", "住民税", "ded", 94, "debit")
     ],
     banks: [id(12)].filter(Boolean),
-    partyId: p ? p.id : "", fieldId: f ? f.id : "", payDay: 20, last: null
+    partyId: p ? p.id : "", fieldId: f ? f.id : "", payDay: 20, last: null, ver: 2
   };
 }
 
@@ -76,7 +76,17 @@ export function defaultPayDate(ym, payDay) {
 async function loadCfg() {
   const snap = await getDoc(doc(col("meta"), "salaryForm"));
   const base = defaultCfg();
-  return snap.exists() ? { ...base, ...snap.data() } : base;
+  if (!snap.exists()) return base;
+  const saved = snap.data() || {};
+  const c = { ...base, ...saved };
+  // 古い設定（ver 2 より前）には、特定保険料・介護保険料の欄を、健康保険料のあとに足す
+  if (!(saved.ver >= 2)) {
+    const add = base.items.filter((b) => (b.key === "tokutei" || b.key === "kaigo") && !c.items.some((i) => i.key === b.key));
+    const at = c.items.findIndex((i) => i.key === "kenpo");
+    c.items.splice(at >= 0 ? at + 1 : c.items.length, 0, ...add);
+    c.ver = 2;
+  }
+  return c;
 }
 const parseN = (s) => { const t = String(s).replace(/[,，\s¥円]/g, "").replace(/[０-９]/g, (c) => String.fromCharCode(c.charCodeAt(0) - 65248)).replace(/[−－ー]/g, "-"); const n = Number(t); return Number.isFinite(n) ? Math.round(n) : 0; };
 const accOptions = (sel) => state.accounts.map((a) => `<option value="${a.id}"${a.id === sel ? " selected" : ""}>${esc(accLabel(a))}</option>`).join("");
