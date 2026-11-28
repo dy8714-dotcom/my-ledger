@@ -1,9 +1,9 @@
 // 定期支払（I7a）：☆定額・★変動・◇年払い・◆外貨 の登録と、記帳画面の「未記帳のお知らせ」
-import { state, col, db, loadRecurring, loadAllVouchers } from "./state.js?v=0.2I11f";
-import { $, esc, hk, yen, parseAmount, ymd, monthOf, openModal, closeModal, showError } from "./util.js?v=0.2I11f";
+import { state, col, db, loadRecurring, loadAllVouchers } from "./state.js?v=0.2I11g";
+import { $, esc, hk, yen, parseAmount, ymd, monthOf, openModal, closeModal, showError } from "./util.js?v=0.2I11g";
 import { doc, setDoc, deleteDoc, writeBatch, serverTimestamp } from "https://www.gstatic.com/firebasejs/13.4.0/firebase-firestore.js";
-import { fromTemplate } from "./patterns.js?v=0.2I11f";
-import { offReason, shiftBusiness } from "./holidays.js?v=0.2I11f";
+import { fromTemplate } from "./patterns.js?v=0.2I11g";
+import { offReason, shiftBusiness } from "./holidays.js?v=0.2I11g";
 
 export const MARKS = ["☆", "★", "◇", "◆"];
 const MARK_NAME = { "☆": "定額・毎月", "★": "金額が変わる・毎月", "◇": "年払い", "◆": "外貨建て・毎月" };

@@ -1,7 +1,7 @@
 // 住民税（自分で納付）（手順I11f）：年度ごとに4期の納付額と納期限を管理し、納めたら記帳する
-import { state, col, db, fetchMonthVouchers, loadVouchers, loadAllVouchers, isClosed } from "./state.js?v=0.2I11f";
-import { $, esc, yen, ymd, monthOf, showError } from "./util.js?v=0.2I11f";
-import { offReason, shiftBusiness } from "./holidays.js?v=0.2I11f";
+import { state, col, db, fetchMonthVouchers, loadVouchers, loadAllVouchers, isClosed } from "./state.js?v=0.2I11g";
+import { $, esc, yen, ymd, monthOf, showError } from "./util.js?v=0.2I11g";
+import { offReason, shiftBusiness } from "./holidays.js?v=0.2I11g";
 import { doc, getDoc, setDoc, updateDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/13.4.0/firebase-firestore.js";
 
 const pad = (n) => String(n).padStart(2, "0");

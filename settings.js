@@ -1,19 +1,20 @@
 // 設定画面（科目・分野の台帳）
-import { state, col, loadAll, loadParties } from "./state.js?v=0.2I11f";
-import { $, esc, norm, hk, showError } from "./util.js?v=0.2I11f";
+import { state, col, loadAll, loadParties } from "./state.js?v=0.2I11g";
+import { $, esc, norm, hk, showError } from "./util.js?v=0.2I11g";
 import { doc, setDoc, writeBatch, serverTimestamp, deleteField }
   from "https://www.gstatic.com/firebasejs/13.4.0/firebase-firestore.js";
 import { SEED_ACCOUNTS, SEED_FIELDS, CATEGORIES, CATEGORY_COLORS, KIND_LABELS, sideOf }
-  from "./seed.js?v=0.2I11f";
-import { db } from "./state.js?v=0.2I11f";
-import { renderImport } from "./importer.js?v=0.2I11f";
-import { renderDeleted } from "./deleted.js?v=0.2I11f";
-import { renderAssets } from "./assets.js?v=0.2I11f";
-import { renderBackup } from "./backup.js?v=0.2I11f";
-import { renderBizMove } from "./bizmove.js?v=0.2I11f";
-import { renderKinds } from "./kinds.js?v=0.2I11f";
-import { renderRecurring } from "./recurring.js?v=0.2I11f";
-import { patternsOf, sortPatterns, describePattern } from "./patterns.js?v=0.2I11f";
+  from "./seed.js?v=0.2I11g";
+import { db } from "./state.js?v=0.2I11g";
+import { renderImport } from "./importer.js?v=0.2I11g";
+import { renderDeleted } from "./deleted.js?v=0.2I11g";
+import { renderAssets } from "./assets.js?v=0.2I11g";
+import { renderBackup } from "./backup.js?v=0.2I11g";
+import { renderBizMove } from "./bizmove.js?v=0.2I11g";
+import { renderBnpl } from "./bnpl.js?v=0.2I11g";
+import { renderKinds } from "./kinds.js?v=0.2I11g";
+import { renderRecurring } from "./recurring.js?v=0.2I11g";
+import { patternsOf, sortPatterns, describePattern } from "./patterns.js?v=0.2I11g";
 
 // ---------- 設定画面 ----------
 export function renderSettings() {
@@ -25,6 +26,7 @@ export function renderSettings() {
       <button type="button" data-sub="recurring" class="${state.sub === "recurring" ? "active" : ""}">定期支払</button>
       <button type="button" data-sub="assets" class="${state.sub === "assets" ? "active" : ""}">月割り償却</button>
       <button type="button" data-sub="bizmove" class="${state.sub === "bizmove" ? "active" : ""}">事業/生活の付け替え</button>
+      <button type="button" data-sub="bnpl" class="${state.sub === "bnpl" ? "active" : ""}">後払い</button>
       <button type="button" data-sub="kinds" class="${state.sub === "kinds" ? "active" : ""}">仕訳の種別</button>
       <button type="button" data-sub="backup" class="${state.sub === "backup" ? "active" : ""}">バックアップ</button>
       <button type="button" data-sub="import" class="${state.sub === "import" ? "active" : ""}">取り込み</button>
@@ -43,6 +45,7 @@ export function renderSettings() {
   else if (state.sub === "recurring") renderRecurring();
   else if (state.sub === "assets") renderAssets();
   else if (state.sub === "bizmove") renderBizMove();
+  else if (state.sub === "bnpl") renderBnpl();
   else if (state.sub === "kinds") renderKinds();
   else if (state.sub === "backup") renderBackup();
   else if (state.sub === "import") renderImport();

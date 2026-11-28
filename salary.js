@@ -1,9 +1,9 @@
 // 給与入力（手順I11b）：給与明細と同じ並びで入力し、複合仕訳を1枚作る（kind="salary"）
-import { state, col, db, fetchMonthVouchers, loadAllVouchers, loadVouchers, isClosed } from "./state.js?v=0.2I11f";
-import { $, esc, yen, ymd, monthOf, showError } from "./util.js?v=0.2I11f";
-import { renderTax } from "./residenttax.js?v=0.2I11f";
-import { renderClean } from "./salaryclean.js?v=0.2I11f";
-import { shiftBusiness } from "./holidays.js?v=0.2I11f";
+import { state, col, db, fetchMonthVouchers, loadAllVouchers, loadVouchers, isClosed } from "./state.js?v=0.2I11g";
+import { $, esc, yen, ymd, monthOf, showError } from "./util.js?v=0.2I11g";
+import { renderTax } from "./residenttax.js?v=0.2I11g";
+import { renderClean } from "./salaryclean.js?v=0.2I11g";
+import { shiftBusiness } from "./holidays.js?v=0.2I11g";
 import { doc, getDoc, setDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/13.4.0/firebase-firestore.js";
 
 const accByNo = (no) => state.accounts.find((a) => a.no === no);

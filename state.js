@@ -43,6 +43,7 @@ export const state = {
   assets: [],
   closings: [],
   recurring: [],
+  bnpl: [],
   lg: null,
   savedSearches: null,
   lastBackupAt: null,
@@ -126,6 +127,10 @@ export async function loadRecurring() {
   return state.recurring;
 }
 // 締めた月かどうか
+export async function loadBnpl() {
+  state.bnpl = toList(await getDocs(col("bnpl")));
+  return state.bnpl;
+}
 export const isClosed = (month) => (state.closings || []).some((c) => c.month === month && c.status === "closed");
 
 export async function loadAll() {
@@ -141,6 +146,7 @@ export async function loadAll() {
   try { await loadRecurring(); } catch (err) { console.error("[定期支払] 読み込み失敗", err); state.recurring = []; }
   try { await loadOpenings(); } catch (err) { console.error("[期首の内訳] 読み込み失敗", err); state.openings = []; }
   try { await loadSnapshots(); } catch (err) { console.error("[月末の内訳] 読み込み失敗", err); state.snapshots = []; }
+  try { await loadBnpl(); } catch (err) { console.error("[後払い] 読み込み失敗", err); state.bnpl = []; }
   try { await loadAssets(); } catch (err) { console.error("[月割り償却] 読み込み失敗", err); state.assets = []; }
 }
 

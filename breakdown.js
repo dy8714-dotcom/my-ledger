@@ -1,8 +1,8 @@
 // 貸借内訳（9章・I8a）：科目の残高と、内訳（取引先ごと・固定資産ごと）の合計を照合する
-import { state, col, loadAllVouchers, loadAssets } from "./state.js?v=0.2I11f";
-import { $, esc, yen, shiftMonth, showError, openModal, closeModal } from "./util.js?v=0.2I11f";
+import { state, col, loadAllVouchers, loadAssets } from "./state.js?v=0.2I11g";
+import { $, esc, yen, shiftMonth, showError, openModal, closeModal } from "./util.js?v=0.2I11g";
 import { setDoc, doc } from "https://www.gstatic.com/firebasejs/13.4.0/firebase-firestore.js";
-import { bsAt } from "./statements.js?v=0.2I11f";
+import { bsAt } from "./statements.js?v=0.2I11g";
 
 const idxOf = (m) => { const [y, mm] = m.split(".").map((x) => parseInt(x, 10)); return y * 12 + (mm - 1); };
 const labelOf = (idx) => `${2000 + Math.floor(idx / 12)}年${(idx % 12) + 1}月`;
@@ -48,14 +48,14 @@ export function computeBreakdown(list, accountsById, assets, X, parties, opening
       if (mi > X || (baseIdx !== null && mi <= baseIdx)) return; // 基準月以前の履歴は数えない
       (v.lines || []).forEach((l) => {
         if (l.accId !== a.id) return;
-        const k = v.partyId || "";
+        const k = no === 41 && v.payVia ? "via:" + v.payVia : v.partyId || ""; // 後払いの未払費用は、後払い会社ごとにまとめる
         by[k] = (by[k] || 0) + (l.side === "debit" ? 1 : -1) * sign * (l.amount || 0);
       });
     });
     const ops = openings.filter((o) => o.key === "p" + no && o.partyId);
     const opTotal = ops.reduce((s, o) => s + (o.amount || 0), 0);
     ops.forEach((o) => { by[o.partyId] = (by[o.partyId] || 0) + (o.amount || 0); });
-    const nameOf = (id) => ((parties || state.parties || []).find((p) => p.id === id) || {}).name || "（削除された取引先）";
+    const nameOf = (id) => id.startsWith("via:") ? (((state.bnpl || []).find((b) => b.id === id.slice(4)) || {}).name || "（後払い）") : ((parties || state.parties || []).find((p) => p.id === id) || {}).name || "（削除された取引先）";
     const rows = Object.keys(by).filter((k) => k && by[k] !== 0).map((k) => ({ label: nameOf(k), amt: by[k] })).sort((p, r) => Math.abs(r.amt) - Math.abs(p.amt));
     const total = rows.reduce((s, r) => s + r.amt, 0);
     const bal = bs.bal[a.id] || 0;

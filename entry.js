@@ -1,18 +1,18 @@
 // 記帳画面（入力欄と仕訳の一覧）
-import { state, col, db, loadParties, loadVouchers, fetchMonthVouchers, loadRecurring } from "./state.js?v=0.2I11f";
-import { downloadFullBackup } from "./backup.js?v=0.2I11f";
-import { renderDeprBanner, askDeprChange, afterDeprEdit } from "./assets.js?v=0.2I11f";
-import { printSelectedOnly } from "./print.js?v=0.2I11f";
-import { kindChip } from "./kinds.js?v=0.2I11f";
-import { renderRecBanner } from "./recurring.js?v=0.2I11f";
-import { askClosedConfirm } from "./monthend.js?v=0.2I11f";
-import { isClosed } from "./state.js?v=0.2I11f";
+import { state, col, db, loadParties, loadVouchers, fetchMonthVouchers, loadRecurring } from "./state.js?v=0.2I11g";
+import { downloadFullBackup } from "./backup.js?v=0.2I11g";
+import { renderDeprBanner, askDeprChange, afterDeprEdit } from "./assets.js?v=0.2I11g";
+import { printSelectedOnly } from "./print.js?v=0.2I11g";
+import { kindChip } from "./kinds.js?v=0.2I11g";
+import { renderRecBanner } from "./recurring.js?v=0.2I11g";
+import { askClosedConfirm } from "./monthend.js?v=0.2I11g";
+import { isClosed } from "./state.js?v=0.2I11g";
 import { $, esc, norm, hk, yen, parseAmount, WD, ymd, monthOf, shiftMonth, firstDayOf, accChip, openModal, closeModal }
-  from "./util.js?v=0.2I11f";
-import { createCombo } from "./combo.js?v=0.2I11f";
+  from "./util.js?v=0.2I11g";
+import { createCombo } from "./combo.js?v=0.2I11g";
 import { doc, setDoc, updateDoc, deleteDoc, writeBatch, serverTimestamp, increment, arrayUnion, deleteField }
   from "https://www.gstatic.com/firebasejs/13.4.0/firebase-firestore.js";
-import { patternsOf, sortPatterns, describePattern, addPattern, fromTemplate } from "./patterns.js?v=0.2I11f";
+import { patternsOf, sortPatterns, describePattern, addPattern, fromTemplate } from "./patterns.js?v=0.2I11g";
 
 // ---------- 候補の作り方 ----------
 const isBlank = (a) => a.name.startsWith("（") || a.name === "ー";
@@ -118,6 +118,7 @@ function mountVoucherForm(root, { voucher = null, onSaved, onCancel, onDeleted }
         <select data-k="biz"><option value="life">生活</option><option value="biz">事業</option><option value="split">按分</option></select></div>
       <div class="in c1"><label>印</label>
         <select data-k="mark"><option value="">ー</option><option>☆</option><option>★</option><option>◆</option><option>◇</option></select></div>
+      <div class="in c3" data-k="viawrap" hidden><label>後払い（41 未払費用のとき）</label><select data-k="via"></select></div>
       <div class="in c3" data-k="bizamtwrap" hidden><label>事業にする側の金額（残りが生活）</label><input type="text" inputmode="numeric" data-k="bizamt" class="amt" autocomplete="off"></div>
       <div class="in c5" data-k="bizmemowrap" hidden><label>生活のほうの摘要（空なら上の摘要と同じ）</label><input type="text" data-k="bizmemo" autocomplete="off"></div>
     </div>
@@ -144,6 +145,15 @@ function mountVoucherForm(root, { voucher = null, onSaved, onCancel, onDeleted }
   const bizEl = q("biz"), bizAmtEl = q("bizamt"), bizAmtWrap = q("bizamtwrap");
   const bizMemoEl = q("bizmemo"), bizMemoWrap = q("bizmemowrap");
   const simpleEls = root.querySelectorAll(".simple");
+  const viaEl = q("via"), viaWrap = q("viawrap");
+  viaEl.innerHTML = `<option value="">なし</option>` + (state.bnpl || []).filter((b) => b.active !== false).map((b) => `<option value="${esc(b.id)}">${esc(b.name)}</option>`).join("");
+  // 貸方に「41 未払費用」があるときだけ、後払いの選択を出す
+  function updateVia() {
+    const a41 = state.accounts.find((a) => a.no === 41);
+    const has = !!a41 && (detail ? rows.some((r) => r.sideEl.value === "credit" && r.acc.getValue().id === a41.id) : credit.getValue().id === a41.id);
+    viaWrap.hidden = !(has && viaEl.options.length > 1);
+    if (!has) viaEl.value = "";
+  }
   const patbar = q("patbar"), rememberEl = q("remember"), rememberWrap = q("rememberwrap"), rememberLabel = q("rememberlabel");
   const linesBox = q("lines"), rowsHost = q("linerows"), balanceEl = q("balance");
   let taxTouched = false;
@@ -183,7 +193,7 @@ function mountVoucherForm(root, { voucher = null, onSaved, onCancel, onDeleted }
   function updateBizUI() {
     bizAmtWrap.hidden = bizMemoWrap.hidden = detail || bizEl.value !== "split";
   }
-  const onAcc = () => { defaultTax(); defaultBiz(); };
+  const onAcc = () => { defaultTax(); defaultBiz(); updateVia(); };
   bizEl.addEventListener("change", () => { bizTouched = true; updateBizUI(); if (bizEl.value === "split") bizAmtEl.focus(); });
   bizAmtEl.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); bizMemoEl.focus(); } });
   bizMemoEl.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); save(); } });
@@ -324,7 +334,7 @@ function mountVoucherForm(root, { voucher = null, onSaved, onCancel, onDeleted }
     r.bizEl.addEventListener("change", () => { r.bizTouched = true; });
     r.acc = createCombo(g("acc"), {
       getItems: accountItems, labelOf: accLabel,
-      onChange(v) { if (!r.taxTouched) r.taxEl.value = accTax(v.id); syncBiz(); },
+      onChange(v) { if (!r.taxTouched) r.taxEl.value = accTax(v.id); syncBiz(); updateVia(); },
       onEnter: () => lineFocus(r, "amount")
     });
     r.sideEl.value = init.side || "debit";
@@ -376,6 +386,7 @@ function mountVoucherForm(root, { voucher = null, onSaved, onCancel, onDeleted }
       addRow({ side: "credit", accId: credit.getValue().id, amount: amt, tax: taxEl.value, taxSet: true, biz: bz });
     }
     q("addline").textContent = "＋ 行を追加";
+    updateVia();
   }
 
   function leaveDetail() {
@@ -385,6 +396,7 @@ function mountVoucherForm(root, { voucher = null, onSaved, onCancel, onDeleted }
     linesBox.hidden = true;
     simpleEls.forEach((e) => { e.hidden = false; });
     updateBizUI();
+    updateVia();
   }
 
   function addLine() {
@@ -432,6 +444,7 @@ function mountVoucherForm(root, { voucher = null, onSaved, onCancel, onDeleted }
       field.setValue(voucher.fieldId);
       if (voucher.partyId && state.partiesById[voucher.partyId]) party.setValue(voucher.partyId);
       markEl.value = voucher.mark || "";
+      const viaInit = voucher.payVia || "";
       if (isSimple(voucher)) {
         const dl = voucher.lines.find((l) => l.side === "debit");
         const cl = voucher.lines.find((l) => l.side === "credit");
@@ -447,6 +460,8 @@ function mountVoucherForm(root, { voucher = null, onSaved, onCancel, onDeleted }
       } else {
         enterDetail(voucher.lines);
       }
+      updateVia();
+      if (viaInit && !viaWrap.hidden) viaEl.value = viaInit;
     } else {
       dateEl.value = defaultDate();
       taxEl.value = "0";
@@ -478,7 +493,7 @@ function mountVoucherForm(root, { voucher = null, onSaved, onCancel, onDeleted }
     leaveDetail();
     autoMemo = null;
     debit.clear(); credit.clear(); field.clear(); party.clear();
-    memoEl.value = ""; amountEl.value = ""; markEl.value = "";
+    memoEl.value = ""; amountEl.value = ""; markEl.value = ""; viaEl.value = ""; viaWrap.hidden = true;
     taxEl.value = "0"; taxTouched = false;
     bizEl.value = "life"; bizAmtEl.value = ""; bizMemoEl.value = ""; bizTouched = false; updateBizUI();
     dateEl.value = defaultDate();
@@ -695,6 +710,7 @@ function mountVoucherForm(root, { voucher = null, onSaved, onCancel, onDeleted }
         updatedAt: serverTimestamp()
       };
       if (!isEdit && draftRecId) data.recId = draftRecId;
+      if (!viaWrap.hidden && viaEl.value) data.payVia = viaEl.value; else if (isEdit && voucher.payVia && voucher.kind !== "bnpl") data.payVia = deleteField();
       let id;
       if (isEdit) id = voucher.id;
       else { id = "v_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 5); data.createdAt = serverTimestamp(); }

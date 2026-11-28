@@ -1,8 +1,8 @@
 // 古い給与の整理（手順I11e）：仮受金を使った古い方式の給与の仕訳を、月ごとに探して選び、バックアップしてから削除する
-import { state, col, db, loadAllVouchers, loadVouchers, isClosed } from "./state.js?v=0.2I11f";
-import { $, esc, yen, hk, showError } from "./util.js?v=0.2I11f";
+import { state, col, db, loadAllVouchers, loadVouchers, isClosed } from "./state.js?v=0.2I11g";
+import { $, esc, yen, hk, showError } from "./util.js?v=0.2I11g";
 import { doc, writeBatch, serverTimestamp } from "https://www.gstatic.com/firebasejs/13.4.0/firebase-firestore.js";
-import { downloadFullBackup } from "./backup.js?v=0.2I11f";
+import { downloadFullBackup } from "./backup.js?v=0.2I11g";
 
 const NAMES = /給与|社保|社会保険|通勤手当|立替金回収|差額収入/;
 const TOUCH = [38, 90, 95, 94, 25, 22]; // 給与まわりの科目の番号
