@@ -1,8 +1,8 @@
 // 仕訳の種別（I11a）：kind と batchId。自動で作る仕訳に付け、まとめて取り消せるようにする
-import { state, col, db, loadAllVouchers, loadVouchers } from "./state.js?v=0.2I11e";
-import { $, esc, yen, showError } from "./util.js?v=0.2I11e";
+import { state, col, db, loadAllVouchers, loadVouchers } from "./state.js?v=0.2I11f";
+import { $, esc, yen, showError } from "./util.js?v=0.2I11f";
 import { doc, writeBatch, serverTimestamp } from "https://www.gstatic.com/firebasejs/13.4.0/firebase-firestore.js";
-import { downloadFullBackup } from "./backup.js?v=0.2I11e";
+import { downloadFullBackup } from "./backup.js?v=0.2I11f";
 
 // normal は「kind が無いとき」と同じ。札は normal 以外に出す
 export const KINDS = [

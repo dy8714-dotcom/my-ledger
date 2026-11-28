@@ -1,8 +1,9 @@
 // 給与入力（手順I11b）：給与明細と同じ並びで入力し、複合仕訳を1枚作る（kind="salary"）
-import { state, col, db, fetchMonthVouchers, loadAllVouchers, loadVouchers, isClosed } from "./state.js?v=0.2I11e";
-import { $, esc, yen, ymd, monthOf, showError } from "./util.js?v=0.2I11e";
-import { renderClean } from "./salaryclean.js?v=0.2I11e";
-import { shiftBusiness } from "./holidays.js?v=0.2I11e";
+import { state, col, db, fetchMonthVouchers, loadAllVouchers, loadVouchers, isClosed } from "./state.js?v=0.2I11f";
+import { $, esc, yen, ymd, monthOf, showError } from "./util.js?v=0.2I11f";
+import { renderTax } from "./residenttax.js?v=0.2I11f";
+import { renderClean } from "./salaryclean.js?v=0.2I11f";
+import { shiftBusiness } from "./holidays.js?v=0.2I11f";
 import { doc, getDoc, setDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/13.4.0/firebase-firestore.js";
 
 const accByNo = (no) => state.accounts.find((a) => a.no === no);
@@ -104,13 +105,19 @@ export function presetSalary(month) { const [y, m] = month.split("."); PRESET = 
 // 先月末の日付（支給日が属する月の、ひとつ前の月の最終日）
 export function lastDayOfPrevMonth(date) { const [y, m] = date.split("-").map(Number); return new Date(Date.UTC(y, m - 1, 0)).toISOString().slice(0, 10); }
 
-const tabsHtml = () => `<div class="subtabs"><button type="button" data-st="input" class="${SALTAB === "input" ? "active" : ""}">給与</button><button type="button" data-st="clean" class="${SALTAB === "clean" ? "active" : ""}">古い給与の整理</button></div>`;
+const tabsHtml = () => `<div class="subtabs"><button type="button" data-st="input" class="${SALTAB === "input" ? "active" : ""}">給与</button><button type="button" data-st="tax" class="${SALTAB === "tax" ? "active" : ""}">住民税（自分で納付）</button><button type="button" data-st="clean" class="${SALTAB === "clean" ? "active" : ""}">古い給与の整理</button></div>`;
 function wireTabs(host) {
   host.querySelectorAll("button[data-st]").forEach((b) => b.addEventListener("click", () => { SALTAB = b.dataset.st; renderSalary(); }));
 }
 
 export async function renderSalary() {
   const host = $("view");
+  if (SALTAB === "tax") {
+    host.innerHTML = `${tabsHtml()}<section class="panel"><h3><span class="bar"></span>住民税（自分で納付）</h3><div id="sal-tax"></div></section>`;
+    wireTabs(host);
+    await renderTax($("sal-tax"));
+    return;
+  }
   if (SALTAB === "clean") {
     host.innerHTML = `${tabsHtml()}<section class="panel"><h3><span class="bar"></span>古い給与の整理</h3><div id="sal-clean"></div></section>`;
     wireTabs(host);

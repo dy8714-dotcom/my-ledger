@@ -1,6 +1,6 @@
 // 印刷の整備（I6d）：どの画面でも、ブラウザの「印刷」（Ctrl+P）でA4にきれいに出す
-import { $ } from "./util.js?v=0.2I11e";
-import { state } from "./state.js?v=0.2I11e";
+import { $ } from "./util.js?v=0.2I11f";
+import { state } from "./state.js?v=0.2I11f";
 
 const TAB = { entry: "記帳", trial: "試算表", bs: "B/S（貸借対照表）", pl: "P/L（損益計算書）", cf: "C/F（キャッシュフロー）", annual: "年間の表", breakdown: "貸借内訳", ledger: "元帳・検索", monthend: "月末", settings: "設定" };
 let selOnly = false;
