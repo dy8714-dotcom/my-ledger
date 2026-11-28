@@ -1,8 +1,8 @@
 // バックアップ（手順G）：全データのJSON、仕訳のCSV
-import { state, col, db, loadAll, loadVouchers, loadAllVouchers } from "./state.js?v=0.2I11d";
-import { $, esc, ymd, showError, openModal, closeModal } from "./util.js?v=0.2I11d";
+import { state, col, db, loadAll, loadVouchers, loadAllVouchers } from "./state.js?v=0.2I11e";
+import { $, esc, ymd, showError, openModal, closeModal } from "./util.js?v=0.2I11e";
 import { collection, getDocs, getDoc, setDoc, deleteDoc, writeBatch, doc } from "https://www.gstatic.com/firebasejs/13.4.0/firebase-firestore.js";
-import { requestToken, saveToDrive, KEEP_FILES } from "./drive.js?v=0.2I11d";
+import { requestToken, saveToDrive, KEEP_FILES } from "./drive.js?v=0.2I11e";
 
 export function saveFile(text, filename, mime, bom) {
   const blob = new Blob([(bom ? "﻿" : "") + text], { type: mime });

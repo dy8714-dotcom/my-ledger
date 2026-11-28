@@ -1,11 +1,11 @@
 // 月末（手順I3）：金融資産の評価替え
-import { state, col, db, loadAllVouchers, loadVouchers, fetchMonthVouchers, loadClosings, isClosed, loadAssets } from "./state.js?v=0.2I11d";
-import { pendingDrafts } from "./assets.js?v=0.2I11d";
-import { monthStatus } from "./recurring.js?v=0.2I11d";
-import { downloadFullBackup, makeCopy, saveBackupToDrive } from "./backup.js?v=0.2I11d";
-import { $, esc, yen, ymd, hk, shiftMonth, monthOf, WD, showError } from "./util.js?v=0.2I11d";
+import { state, col, db, loadAllVouchers, loadVouchers, fetchMonthVouchers, loadClosings, isClosed, loadAssets } from "./state.js?v=0.2I11e";
+import { pendingDrafts } from "./assets.js?v=0.2I11e";
+import { monthStatus } from "./recurring.js?v=0.2I11e";
+import { downloadFullBackup, makeCopy, saveBackupToDrive } from "./backup.js?v=0.2I11e";
+import { $, esc, yen, ymd, hk, shiftMonth, monthOf, WD, showError } from "./util.js?v=0.2I11e";
 import { doc, getDocs, writeBatch, setDoc, deleteField, serverTimestamp, arrayUnion } from "https://www.gstatic.com/firebasejs/13.4.0/firebase-firestore.js";
-import { presetSalary } from "./salary.js?v=0.2I11d";
+import { presetSalary } from "./salary.js?v=0.2I11e";
 
 const EVAL_NOS = [26, 27, 28, 29, 30]; // 評価替えの対象（金融資産）
 // 評価益・評価損の科目：仮想通貨＝80/81、そのほか（株）＝82/83

@@ -1,7 +1,8 @@
 // 給与入力（手順I11b）：給与明細と同じ並びで入力し、複合仕訳を1枚作る（kind="salary"）
-import { state, col, db, fetchMonthVouchers, loadAllVouchers, loadVouchers, isClosed } from "./state.js?v=0.2I11d";
-import { $, esc, yen, ymd, monthOf, showError } from "./util.js?v=0.2I11d";
-import { shiftBusiness } from "./holidays.js?v=0.2I11d";
+import { state, col, db, fetchMonthVouchers, loadAllVouchers, loadVouchers, isClosed } from "./state.js?v=0.2I11e";
+import { $, esc, yen, ymd, monthOf, showError } from "./util.js?v=0.2I11e";
+import { renderClean } from "./salaryclean.js?v=0.2I11e";
+import { shiftBusiness } from "./holidays.js?v=0.2I11e";
 import { doc, getDoc, setDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/13.4.0/firebase-firestore.js";
 
 const accByNo = (no) => state.accounts.find((a) => a.no === no);
@@ -15,12 +16,12 @@ export function defaultCfg() {
   const mk = (key, label, group, no, side, commute) => ({ key, label, group, accId: id(no), side, ...(commute ? { commute: true } : {}) });
   return {
     items: [
-      mk("base", "基準賃金計", "pay", 90, "credit"), mk("extra", "基準外賃金計", "pay", 90, "credit"), mk("commute", "通勤手当", "pay", 90, "credit", true),
+      mk("base", "基準賃金計", "pay", 90, "credit"), mk("extra", "基準外賃金計", "pay", 90, "credit"), mk("commute", "通勤手当", "pay", 90, "credit", true), mk("reimb", "その他支払い（立替の精算）", "pay", 22, "credit"),
       mk("kenpo", "健康保険料", "ded", 95, "debit"), mk("tokutei", "特定保険料", "ded", 95, "debit"), mk("kaigo", "介護保険料", "ded", 95, "debit"), mk("nenkin", "厚生年金", "ded", 95, "debit"), mk("koyo", "雇用保険料", "ded", 95, "debit"),
       mk("shotoku", "所得税", "ded", 94, "debit"), mk("juminzei", "住民税", "ded", 94, "debit")
     ],
     banks: [id(12)].filter(Boolean),
-    partyId: p ? p.id : "", fieldId: f ? f.id : "", payDay: 20, last: null, ver: 2
+    partyId: p ? p.id : "", fieldId: f ? f.id : "", payDay: 20, last: null, ver: 3
   };
 }
 
@@ -84,21 +85,38 @@ async function loadCfg() {
     const add = base.items.filter((b) => (b.key === "tokutei" || b.key === "kaigo") && !c.items.some((i) => i.key === b.key));
     const at = c.items.findIndex((i) => i.key === "kenpo");
     c.items.splice(at >= 0 ? at + 1 : c.items.length, 0, ...add);
-    c.ver = 2;
   }
+  // ver 3：「その他支払い（立替の精算）」の欄を、通勤手当のあとに足す
+  if (!(saved.ver >= 3) && !c.items.some((i) => i.key === "reimb")) {
+    const at = c.items.findIndex((i) => i.key === "commute");
+    c.items.splice(at >= 0 ? at + 1 : c.items.length, 0, base.items.find((b) => b.key === "reimb"));
+  }
+  c.ver = 3;
   return c;
 }
 const parseN = (s) => { const t = String(s).replace(/[,，\s¥円]/g, "").replace(/[０-９]/g, (c) => String.fromCharCode(c.charCodeAt(0) - 65248)).replace(/[−－ー]/g, "-"); const n = Number(t); return Number.isFinite(n) ? Math.round(n) : 0; };
 const accOptions = (sel) => state.accounts.map((a) => `<option value="${a.id}"${a.id === sel ? " selected" : ""}>${esc(accLabel(a))}</option>`).join("");
 
+let SALTAB = "input";
 let CFG = null, S = null, LIST = [], EXIST = null, PRESET = "";
 // 月末の画面などから、対象月を決めて給与タブを開く（month は "26.11" の形）
 export function presetSalary(month) { const [y, m] = month.split("."); PRESET = `20${y}-${String(m).padStart(2, "0")}`; }
 // 先月末の日付（支給日が属する月の、ひとつ前の月の最終日）
 export function lastDayOfPrevMonth(date) { const [y, m] = date.split("-").map(Number); return new Date(Date.UTC(y, m - 1, 0)).toISOString().slice(0, 10); }
 
+const tabsHtml = () => `<div class="subtabs"><button type="button" data-st="input" class="${SALTAB === "input" ? "active" : ""}">給与</button><button type="button" data-st="clean" class="${SALTAB === "clean" ? "active" : ""}">古い給与の整理</button></div>`;
+function wireTabs(host) {
+  host.querySelectorAll("button[data-st]").forEach((b) => b.addEventListener("click", () => { SALTAB = b.dataset.st; renderSalary(); }));
+}
+
 export async function renderSalary() {
   const host = $("view");
+  if (SALTAB === "clean") {
+    host.innerHTML = `${tabsHtml()}<section class="panel"><h3><span class="bar"></span>古い給与の整理</h3><div id="sal-clean"></div></section>`;
+    wireTabs(host);
+    await renderClean($("sal-clean"), { goSalary: (month) => { presetSalary(month); SALTAB = "input"; renderSalary(); } });
+    return;
+  }
   host.innerHTML = `<section class="panel"><p class="note">読み込んでいます…</p></section>`;
   try { CFG = await loadCfg(); LIST = await loadAllVouchers(); }
   catch (err) { host.innerHTML = ""; showError("読み込みに失敗しました：" + (err.code || err.message)); return; }
@@ -121,7 +139,7 @@ async function checkExisting() {
 
 function draw(host) {
   const grp = (g) => CFG.items.filter((it) => it.group === g).map((it) => `<label>${esc(it.label)}</label><input type="text" inputmode="numeric" data-k="${esc(it.key)}" value="${S.vals[it.key] ?? ""}">`).join("");
-  host.innerHTML = `
+  host.innerHTML = `${tabsHtml()}
   <section class="panel" id="sal">
     <h3><span class="bar"></span>給与入力 <span class="note" style="font-weight:400">給与明細と同じ並びで入れると、複合仕訳を1枚作ります</span></h3>
     <div class="toolbar">
@@ -138,7 +156,7 @@ function draw(host) {
       <div class="salbox"><h4>控除</h4><div class="salg">${grp("ded")}</div><div class="saltot"><span>控除額計</span><span id="sal-ded">0</span></div></div>
       <div class="salbox"><h4>振込</h4><div class="salg" id="sal-banks"></div>
         <div class="saltot"><span>当月支給額</span><span id="sal-net">0</span></div>
-        <div class="salg" style="margin-top:6px"><label>明細の差引支給額</label><input type="text" inputmode="numeric" id="sal-slip" value="${S.slip}"></div>
+        <div class="salg" style="margin-top:6px"><label>明細の当月支給額（確認用・空でもOK）</label><input type="text" inputmode="numeric" id="sal-slip" value="${S.slip}"></div>
         <p class="note" id="sal-chk"></p></div>
     </div>
     <h4 style="margin:14px 0 6px">できる仕訳（1枚・種別：給与）</h4>
@@ -150,7 +168,7 @@ function draw(host) {
     <p class="note" id="sal-msg"></p>
     <details style="margin-top:16px"><summary>入力欄の設定（項目の追加・削除、勤務先、振込先）</summary><div id="sal-cfg"></div></details>
   </section>`;
-  drawBanks(); drawExtra(); drawCfg(); recalc();
+  wireTabs(host); drawBanks(); drawExtra(); drawCfg(); recalc();
   $("sal-ym").addEventListener("change", async (e) => { S.ym = e.target.value || S.ym; S.recover = ""; S.date = defaultPayDate(S.ym, CFG.payDay); $("sal-date").value = S.date; await checkExisting(); recalc(); });
   $("sal-date").addEventListener("change", async (e) => { S.date = e.target.value; S.recover = ""; await checkExisting(); recalc(); });
   $("sal-bonus").addEventListener("change", async (e) => { S.bonus = e.target.value === "1"; await checkExisting(); recalc(); });
